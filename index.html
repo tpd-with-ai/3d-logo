@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="A small, teachable 3D Logo: drive a turtle through space and draw lines and triangles." />
+    <meta name="description" content="A small, teachable 3D Logo: drive a turtle through space and draw lines, triangles, faces, and tetrahedra." />
     <title>3D Logo Playground</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M28 16 6 4l5 12-5 12z' fill='%2386efac'/></svg>" />
   </head>
@@ -16,6 +16,7 @@
           <span class="field-label">Example</span>
           <select id="examples" aria-label="Load an example program"></select>
         </label>
+        <button id="gallery-open" class="btn" type="button" aria-haspopup="dialog">Gallery</button>
         <button id="help-open" class="btn btn-ghost" type="button" aria-haspopup="dialog">Help</button>
       </div>
     </header>
@@ -43,6 +44,7 @@
             <input id="live" type="checkbox" checked /> Live
           </label>
         </div>
+        <div id="example-info" class="example-info" hidden></div>
         <div id="editor" class="editor"></div>
         <div class="status-area">
           <p id="status" class="status" role="status" aria-live="polite"></p>
@@ -55,6 +57,9 @@
 
       <section class="panel view-panel" aria-label="3D view">
         <div id="viewport" class="viewport" tabindex="0" aria-describedby="view-help"></div>
+        <div class="fly-hint" aria-hidden="true">
+          <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> fly · <kbd>E</kbd><kbd>Q</kbd> up/down · <kbd>Shift</kbd> fast · <kbd>Esc</kbd> leave
+        </div>
         <div class="view-toolbar" role="toolbar" aria-label="View controls">
           <button id="fit" class="btn btn-small" type="button" title="Frame the drawing (F)">Fit</button>
           <button id="reset-view" class="btn btn-small" type="button" title="Reset camera to the default view">Reset view</button>
@@ -66,8 +71,9 @@
         </div>
         <div id="hud" class="hud" aria-label="Turtle state"></div>
         <p id="view-help" class="view-help">
-          Drag to orbit · right-drag or Shift-drag to pan · scroll to zoom. With the view focused: arrows pan,
-          Shift+arrows orbit, + / − zoom, F fits.
+          Drag to orbit · right-drag or Shift-drag to pan · scroll to zoom. Click or Tab into the view to fly:
+          W/S forward/back, A/D left/right, E/Q up/down, hold Shift for speed; arrows pan, Shift+arrows orbit,
+          + / − zoom, F fits.
         </p>
       </section>
     </main>
@@ -78,6 +84,14 @@
         <button id="help-close" class="btn btn-ghost" type="button" aria-label="Close help">✕</button>
       </div>
       <div id="help-body" class="help-body"></div>
+    </dialog>
+
+    <dialog id="gallery" class="help gallery" aria-labelledby="gallery-title">
+      <div class="help-head">
+        <h2 id="gallery-title">Example gallery</h2>
+        <button id="gallery-close" class="btn btn-ghost" type="button" aria-label="Close gallery">✕</button>
+      </div>
+      <div id="gallery-body" class="help-body gallery-body"></div>
     </dialog>
 
     <script type="module" src="/src/main.ts"></script>

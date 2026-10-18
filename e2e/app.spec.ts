@@ -79,17 +79,197 @@ test('live mode reruns as you type and shows located errors', async ({ page }) =
   await expect(status(page)).toContainText('1 line');
 });
 
-test('examples load and run, including triangle mode', async ({ page }) => {
-  await page.locator('#examples').selectOption({ label: 'Triangle ribbon' });
+test('examples load and run, including triangle and tetrahedra modes', async ({ page }) => {
+  await page.locator('#examples').selectOption({ label: 'Triangle strip' });
   await expect(status(page)).toContainText('0 lines · 16 triangles');
   await expect(page.locator('.cm-content')).toContainText('triangles');
 
-  await page.locator('#examples').selectOption({ label: 'Pinwheel (lines + triangles)' });
+  await page.locator('#examples').selectOption({ label: 'Pinwheel' });
   await expect(status(page)).toContainText('1 line · 4 triangles · 1 pending point');
+
+  await page.locator('#examples').selectOption({ label: 'One tetrahedron' });
+  await expect(status(page)).toContainText('4 triangles · 1 tetrahedron');
+  await expect(page.locator('#hud')).toContainText('tetrahedra');
+  await page.locator('#examples').selectOption({ label: 'Tetrahedron chain (Boerdijk–Coxeter helix)' });
+  await expect(status(page)).toContainText('116 triangles · 29 tetrahedra');
+
+  await setCode(page, 'tetrahedra\nforward 10 forward 10 forward 10');
+  await expect(status(page)).toContainText('0 triangles · 1 flat window skipped');
+});
+
+type Debug = { __logo3d: { camera(): { position: number[]; target: number[]; direction: number[] }; ndcExtent(): number } };
+const camera = (page: Page) => page.evaluate(() => (window as unknown as Debug).__logo3d.camera());
+
+test('every example runs without errors and fits the camera', async ({ page }) => {
+  const ids = await page.locator('#examples option').evaluateAll((options) =>
+    options.map((o) => (o as HTMLOptionElement).value).filter(Boolean),
+  );
+  expect(ids.length).toBeGreaterThanOrEqual(25);
+  for (const id of ids) {
+    await page.locator('#examples').selectOption(id);
+    await expect(status(page), id).toContainText('Ran');
+    await expect(page.locator('#error')).toBeHidden();
+    const extent = await page.evaluate(() => (window as unknown as Debug).__logo3d.ndcExtent());
+    expect(extent, id).toBeGreaterThan(0.2); // not lost in the distance
+    expect(extent, id).toBeLessThanOrEqual(1); // every corner of the drawing's box is on screen
+  }
+});
+
+test('the gallery shows categories, accuracy labels, and sources, and opens the genus-3 model', async ({ page }) => {
+  await page.locator('#gallery-open').click();
+  const dialog = page.getByRole('dialog', { name: 'Example gallery' });
+  await expect(dialog).toBeVisible();
+  for (const heading of ['Turning basics', 'Drawing modes', 'Polyhedra', 'Curves & knots', 'Surfaces']) {
+    await expect(dialog.getByRole('heading', { name: heading })).toBeVisible();
+  }
+  const card = dialog.locator('.card', { hasText: 'Mizhaev genus-3 polyhedron' });
+  await expect(card.locator('.badge')).toHaveText('Exact');
+  await expect(card).toContainText('56 triangles');
+  await expect(card.getByRole('link')).toHaveAttribute('href', 'https://arxiv.org/abs/2609.17700');
+  await expect(dialog.locator('.card', { hasText: 'Möbius strip' }).locator('.badge')).toHaveText('Approximation');
+
+  await card.getByRole('button', { name: 'Mizhaev genus-3 polyhedron' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('#examples')).toHaveValue('mizhaev');
+  await expect(status(page)).toContainText('0 lines · 56 triangles');
+  const info = page.locator('#example-info');
+  await expect(info).toContainText('Exact');
+  await expect(info.getByRole('link', { name: 'Source' })).toHaveAttribute('href', /arxiv\.org\/abs\/2609\.17700/);
+  await expect(page.locator('.cm-content')).toContainText('polygon [');
+
+  // Editing turns the program into the user's own: the label goes away.
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type(' ');
+  await expect(info).toBeHidden();
+});
+
+test.describe('keyboard flight', () => {
+  const sub = (a: number[], b: number[]) => a.map((n, i) => n - b[i]);
+  const len = (a: number[]) => Math.hypot(...a);
+  const unit = (a: number[]) => a.map((n) => n / len(a));
+  const dot = (a: number[], b: number[]) => a.reduce((s, n, i) => s + n * b[i], 0);
+  /** Waits until orbit damping has died out (headless frame rates can be low). */
+  const settle = (page: Page) =>
+    expect
+      .poll(async () => {
+        const a = await camera(page);
+        await page.waitForTimeout(100);
+        return len(sub((await camera(page)).position, a.position));
+      })
+      .toBeLessThan(1e-6);
+  const hold = async (page: Page, key: string, ms: number) => {
+    await page.keyboard.down(key);
+    await page.waitForTimeout(ms);
+    await page.keyboard.up(key);
+    await page.waitForTimeout(100); // let the last frame land
+  };
+
+  test('only flies while the view is focused; typing in the editor never moves the camera', async ({ page }) => {
+    await page.locator('#live').uncheck();
+    const before = await camera(page);
+    await page.locator('.cm-content').click();
+    await hold(page, 'w', 300);
+    await page.keyboard.type('asdqe');
+    expect(len(sub((await camera(page)).position, before.position))).toBeLessThan(1e-6);
+    await expect(page.locator('.cm-content')).toContainText('wasdqe');
+
+    await page.locator('#run').focus();
+    await hold(page, 'w', 200);
+    expect(len(sub((await camera(page)).position, before.position))).toBeLessThan(1e-6);
+    await expect(page.locator('.fly-hint')).toBeHidden();
+
+    await page.locator('#viewport').focus();
+    await expect(page.locator('.fly-hint')).toBeVisible();
+    await hold(page, 'w', 300);
+    const after = await camera(page);
+    expect(len(sub(after.position, before.position))).toBeGreaterThan(5);
+  });
+
+  test('W follows the current view after orbiting, and the orbit target travels with the camera', async ({ page }) => {
+    await page.locator('#viewport').click({ position: { x: 40, y: 200 } });
+    await expect(page.locator('#viewport')).toBeFocused();
+    for (let i = 0; i < 6; i++) await page.keyboard.press('Shift+ArrowLeft'); // orbit to a new view
+    for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowUp');
+    await settle(page);
+    const before = await camera(page);
+    await hold(page, 'w', 400);
+    const after = await camera(page);
+    const moved = sub(after.position, before.position);
+    expect(len(moved)).toBeGreaterThan(10);
+    expect(dot(unit(moved), before.direction)).toBeGreaterThan(0.999); // straight along the view
+    // Target moved by the same offset, so the camera keeps its place relative to the orbit target
+    // (no snap on the next drag).
+    const orbit = sub(before.position, before.target);
+    expect(len(sub(sub(after.position, after.target), orbit))).toBeLessThan(1e-6 * len(orbit));
+    expect(dot(after.direction, before.direction)).toBeGreaterThan(0.99999);
+
+    const beforeStrafe = await camera(page);
+    await hold(page, 'd', 300);
+    const strafe = sub((await camera(page)).position, beforeStrafe.position);
+    expect(Math.abs(dot(unit(strafe), before.direction))).toBeLessThan(1e-3); // sideways
+    expect(Math.abs(strafe[2])).toBeLessThan(1e-6); // parallel to the ground
+
+    const beforeRise = await camera(page);
+    await hold(page, 'e', 300);
+    const rise = sub((await camera(page)).position, beforeRise.position);
+    expect(unit(rise)[2]).toBeGreaterThan(0.9999);
+  });
+
+  test('held keys are dropped when focus or the window is lost, or a dialog opens', async ({ page }) => {
+    const viewport = page.locator('#viewport');
+    /** How far the camera drifts over 250 ms (OrbitControls re-derives the position each frame, so allow float noise). */
+    const drift = async () => {
+      const a = await camera(page);
+      await page.waitForTimeout(250);
+      return len(sub((await camera(page)).position, a.position));
+    };
+
+    await viewport.focus();
+    await page.keyboard.down('w');
+    await page.waitForTimeout(150);
+    await page.locator('#help-open').click(); // opening Help moves focus into the dialog
+    expect(await drift()).toBeLessThan(1e-6);
+    await page.keyboard.up('w');
+    await page.keyboard.press('Escape');
+
+    await viewport.focus();
+    await page.keyboard.down('s');
+    await page.waitForTimeout(150);
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+    expect(await drift()).toBeLessThan(1e-6);
+    await page.keyboard.up('s');
+
+    await viewport.focus();
+    await page.keyboard.down('a');
+    await page.waitForTimeout(150);
+    await page.keyboard.press('Escape'); // leaves the view
+    await expect(viewport).not.toBeFocused();
+    expect(await drift()).toBeLessThan(1e-6);
+    await page.keyboard.up('a');
+  });
+
+  test('arrow-key pan, zoom keys, and Fit still work alongside flight', async ({ page }) => {
+    await page.locator('#viewport').focus();
+    const start = await camera(page);
+    await page.keyboard.press('ArrowUp');
+    await page.waitForTimeout(300);
+    const panned = await camera(page);
+    expect(len(sub(panned.target, start.target))).toBeGreaterThan(0.1);
+    await page.keyboard.press('+');
+    await page.waitForTimeout(300);
+    const zoomed = await camera(page);
+    expect(len(sub(zoomed.position, zoomed.target))).toBeLessThan(len(sub(panned.position, panned.target)) * 0.9);
+    await hold(page, 'w', 200);
+    await page.keyboard.press('f');
+    await page.waitForTimeout(300);
+    const extent = await page.evaluate(() => (window as unknown as Debug).__logo3d.ndcExtent());
+    expect(extent).toBeLessThanOrEqual(1);
+  });
 });
 
 test('animated playback can be stopped and stepped', async ({ page }) => {
-  await page.locator('#examples').selectOption({ label: 'Helix (pitch)' });
+  await page.locator('#examples').selectOption({ label: 'Helix' });
   await page.locator('#speed').selectOption({ label: 'Slow' });
   await page.locator('#run').click();
   await expect(status(page)).toContainText(/Step \d+ of 576/);
@@ -158,7 +338,7 @@ test('re-running does not leak GPU geometries or textures', async ({ page }) => 
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       return (window as unknown as { __logo3d: { memory(): object } }).__logo3d.memory();
     });
-  const examples = ['Globe of rings (roll)', 'Tetrahelix (folded triangles)', 'Pinwheel (lines + triangles)'];
+  const examples = ['Globe of rings', 'Folded triangle strip', 'Pinwheel', 'Tetrahedron chain (Boerdijk–Coxeter helix)', 'Mizhaev genus-3 polyhedron', 'Filled polygons'];
   const runAll = async () => {
     for (const label of examples) {
       await page.locator('#examples').selectOption({ label });

@@ -5,6 +5,7 @@ import type { Vec3 } from '../turtle/vec';
 import { EXAMPLES } from '../examples';
 import { Viewport } from '../render/viewport';
 import { Editor } from './editor';
+import { badge, galleryHtml } from './gallery';
 import { helpHtml } from './help';
 
 const STORAGE_KEY = '3d-logo:code';
@@ -40,6 +41,7 @@ export class App {
     error: $('error'),
     errorText: $('error-text'),
     hud: $('hud'),
+    exampleInfo: $('example-info'),
     viewport: $('viewport'),
   };
   private result?: RunResult;
@@ -61,17 +63,17 @@ export class App {
     });
 
     this.ui.examples.add(new Option('— choose —', ''));
-    for (const group of new Set(EXAMPLES.map((e) => e.group))) {
+    for (const group of new Set(EXAMPLES.map((e) => e.category))) {
       const optgroup = document.createElement('optgroup');
       optgroup.label = group;
-      for (const example of EXAMPLES.filter((e) => e.group === group)) optgroup.append(new Option(example.title, example.id));
+      for (const example of EXAMPLES.filter((e) => e.category === group)) optgroup.append(new Option(example.title, example.id));
       this.ui.examples.append(optgroup);
     }
     this.ui.examples.value = '';
 
     this.bindControls();
-    // GPU resource counts for the browser leak test (e2e/app.spec.ts).
-    Object.assign(window, { __logo3d: { memory: () => this.viewport.memory() } });
+    // GPU resource counts and camera state for browser tests (e2e/app.spec.ts).
+    Object.assign(window, { __logo3d: { memory: () => this.viewport.memory(), camera: () => this.viewport.cameraState(), ndcExtent: () => this.viewport.ndcExtent(this.bounds) } });
     $('help-body').innerHTML = helpHtml();
     this.run(false, true);
     this.viewport.resetCamera(this.bounds);
@@ -99,7 +101,9 @@ export class App {
     });
 
     ui.viewport.addEventListener('keydown', (event) => {
-      if (event.key === '+' || event.key === '=') this.viewport.zoom(0.8);
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.key === 'Escape') ui.viewport.blur();
+      else if (event.key === '+' || event.key === '=') this.viewport.zoom(0.8);
       else if (event.key === '-' || event.key === '_') this.viewport.zoom(1.25);
       else if (event.key.toLowerCase() === 'f') this.viewport.frame(this.bounds);
       else return;
@@ -107,7 +111,10 @@ export class App {
     });
 
     const help = $<HTMLDialogElement>('help');
-    $('help-open').addEventListener('click', () => help.showModal());
+    $('help-open').addEventListener('click', () => {
+      this.viewport.stopFlying();
+      help.showModal();
+    });
     $('help-close').addEventListener('click', () => help.close());
     help.addEventListener('click', (event) => {
       if (event.target === help) return help.close();
@@ -117,19 +124,41 @@ export class App {
       help.close();
       this.loadExample(id, 40);
     });
+
+    const gallery = $<HTMLDialogElement>('gallery');
+    $('gallery-open').addEventListener('click', () => {
+      this.viewport.stopFlying();
+      const body = $('gallery-body');
+      if (!body.childElementCount) body.innerHTML = galleryHtml(); // runs every example once, so only on demand
+      gallery.showModal();
+    });
+    $('gallery-close').addEventListener('click', () => gallery.close());
+    gallery.addEventListener('click', (event) => {
+      if (event.target === gallery) return gallery.close();
+      const id = (event.target as HTMLElement).closest<HTMLElement>('button[data-example]')?.dataset.example;
+      if (!id) return;
+      gallery.close();
+      this.loadExample(id);
+    });
   }
 
   private loadExample(id: string, speed?: number): void {
     const example = EXAMPLES.find((e) => e.id === id);
     if (!example) return;
     this.editor.setDoc(example.code);
-    this.ui.examples.value = id; // setDoc's edit handler resets the picker
+    this.ui.examples.value = id; // setDoc's edit handler resets the picker and hides the info bar
+    const source = example.source
+      ? ` <a href="${example.source.url}" target="_blank" rel="noopener">Source</a>`
+      : '';
+    this.ui.exampleInfo.innerHTML = `${badge(example.accuracy)} <b>${example.title}</b> <span>${example.description}${source}</span>`;
+    this.ui.exampleInfo.hidden = false;
     this.run(true, true, true, speed);
   }
 
   private onEdit(doc: string): void {
     localStorage.setItem(STORAGE_KEY, doc);
     this.ui.examples.value = '';
+    this.ui.exampleInfo.hidden = true;
     if (this.playback) this.stop();
     window.clearTimeout(this.liveTimer);
     if (this.ui.live.checked) this.liveTimer = window.setTimeout(() => this.run(false), LIVE_DELAY_MS);
@@ -261,6 +290,8 @@ export class App {
     this.updateHud(result.pose);
 
     const parts = [plural(drawing.segments.length, 'line'), plural(drawing.triangles.length, 'triangle')];
+    if (drawing.tetrahedra) parts.push(`${plural(drawing.tetrahedra, 'tetrahedron').replace(/ons$/, 'a')}`);
+    if (drawing.skippedTetrahedra) parts.push(`${plural(drawing.skippedTetrahedra, 'flat window')} skipped`);
     if (drawing.pendingPoints.length) parts.push(plural(drawing.pendingPoints.length, 'pending point'));
     const timing = elapsed === undefined ? '' : ` in ${elapsed < 1 ? '<1' : Math.round(elapsed)} ms`;
     const prefix = result.error ? 'Stopped by an error after' : 'Ran';

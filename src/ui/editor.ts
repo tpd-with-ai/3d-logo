@@ -4,7 +4,7 @@ import { setDiagnostics } from '@codemirror/lint';
 import { EditorState, StateEffect, StateField, type Extension } from '@codemirror/state';
 import { Decoration, EditorView, keymap, type DecorationSet } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
-import { findCommand, NAMED_COLORS } from '../lang/commands';
+import { findCommand, FUNCTIONS, NAMED_COLORS } from '../lang/commands';
 import type { LogoError, Span } from '../lang/errors';
 
 const logoLanguage = StreamLanguage.define<null>({
@@ -20,12 +20,14 @@ const logoLanguage = StreamLanguage.define<null>({
       if (word === 'repeat') return 'keyword';
       if (word === 'repcount') return 'variableName.special';
       if (findCommand(word)) return 'variableName.function';
-      if (word in NAMED_COLORS) return 'atom';
+      if (word in NAMED_COLORS || word === 'rgb' || word === 'hsv') return 'atom';
+      if ((FUNCTIONS as readonly string[]).includes(word)) return 'variableName.standard';
       return 'invalid';
     }
     if (stream.match(/^[[\]]/)) return 'bracket';
     if (stream.match(/^[()]/)) return 'paren';
     if (stream.match(/^[-+*/]/)) return 'operator';
+    if (stream.match(/^,/)) return 'separator';
     stream.next();
     return 'invalid';
   },
@@ -40,7 +42,8 @@ const highlight = HighlightStyle.define([
   { tag: tags.keyword, color: '#c4b5fd', fontWeight: '600' },
   { tag: tags.function(tags.variableName), color: '#7dd3fc' },
   { tag: tags.special(tags.variableName), color: '#86efac' },
-  { tag: tags.operator, color: '#cbd5e1' },
+  { tag: tags.standard(tags.variableName), color: '#a5b4fc' },
+  { tag: [tags.operator, tags.separator], color: '#cbd5e1' },
   { tag: [tags.bracket, tags.paren], color: '#94a3b8' },
   { tag: tags.invalid, color: '#fca5a5', textDecoration: 'underline wavy #f87171' },
 ]);

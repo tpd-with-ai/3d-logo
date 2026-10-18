@@ -1,0 +1,36 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`examples > match the recorded geometry counts and bounds 1`] = `
+{
+  "cube": "20 lines, 0 triangles, 0 tetrahedra, 0 pending, 60 steps, box [0 0 0] to [60 60 60]",
+  "geodesic": "0 lines, 80 triangles, 0 tetrahedra, 0 pending, 401 steps, box [-80 -80 -80] to [80 80 80]",
+  "globe": "432 lines, 0 triangles, 0 tetrahedra, 0 pending, 1320 steps, box [-69 -31 0] to [66 37 69]",
+  "helicoid": "0 lines, 96 triangles, 0 tetrahedra, 0 pending, 197 steps, box [-70 -70 0] to [70 70 144]",
+  "helix": "144 lines, 0 triangles, 0 tetrahedra, 0 pending, 720 steps, box [-64 -29 0] to [0 35 296]",
+  "hilbert": "63 lines, 0 triangles, 0 tetrahedra, 0 pending, 270 steps, box [-36 0 0] to [0 36 36]",
+  "icosahedron": "0 lines, 20 triangles, 0 tetrahedra, 0 pending, 101 steps, box [-81 -81 -81] to [81 81 81]",
+  "mizhaev": "0 lines, 56 triangles, 0 tetrahedra, 0 pending, 89 steps, box [-300 -300 -234] to [300 300 234]",
+  "mobius": "0 lines, 72 triangles, 0 tetrahedra, 0 pending, 149 steps, box [-60 -71 -15] to [75 71 15]",
+  "octahedron": "0 lines, 8 triangles, 0 tetrahedra, 0 pending, 41 steps, box [-50 -50 -50] to [50 50 50]",
+  "pinwheel": "1 lines, 4 triangles, 0 tetrahedra, 1 pending, 44 steps, box [-40 0 0] to [40 0 120]",
+  "polygon-intro": "0 lines, 9 triangles, 0 tetrahedra, 0 pending, 53 steps, box [-52 -23 0] to [0 130 50]",
+  "rainbow-helix": "216 lines, 0 triangles, 0 tetrahedra, 0 pending, 1296 steps, box [-56 -26 0] to [0 30 225]",
+  "rgb-spiral": "60 lines, 0 triangles, 0 tetrahedra, 0 pending, 300 steps, box [-81 -83 0] to [83 83 66]",
+  "ribbon": "0 lines, 16 triangles, 0 tetrahedra, 0 pending, 58 steps, box [0 0 0] to [208 150 0]",
+  "saddle": "26 lines, 0 triangles, 0 tetrahedra, 0 pending, 144 steps, box [-60 -60 -60] to [60 60 60]",
+  "solid-cube": "0 lines, 12 triangles, 0 tetrahedra, 0 pending, 100 steps, box [0 0 0] to [60 60 60]",
+  "square": "9 lines, 0 triangles, 0 tetrahedra, 0 pending, 31 steps, box [-22 0 0] to [60 150 0]",
+  "squiral": "60 lines, 0 triangles, 0 tetrahedra, 0 pending, 240 steps, box [-80 -84 0] to [84 82 0]",
+  "tetra-chain": "0 lines, 116 triangles, 29 tetrahedra, 0 pending, 137 steps, box [-12 0 -295] to [210 159 0]",
+  "tetra-single": "0 lines, 4 triangles, 1 tetrahedra, 0 pending, 5 steps, box [0 0 0] to [40 40 40]",
+  "tetrahedron": "0 lines, 4 triangles, 0 tetrahedra, 0 pending, 60 steps, box [0 0 0] to [52 60 49]",
+  "tetrahelix": "0 lines, 30 triangles, 0 tetrahedra, 0 pending, 137 steps, box [-12 0 -295] to [210 159 0]",
+  "torus": "864 lines, 0 triangles, 0 tetrahedra, 0 pending, 2919 steps, box [-80 -80 -17] to [80 80 22]",
+  "trefoil": "120 lines, 0 triangles, 0 tetrahedra, 0 pending, 363 steps, box [-68 -75 -25] to [68 52 25]",
+  "turn-order": "3 lines, 0 triangles, 0 tetrahedra, 0 pending, 18 steps, box [-40 0 0] to [40 0 40]",
+  "turn-pitch": "3 lines, 0 triangles, 0 tetrahedra, 0 pending, 5 steps, box [0 0 0] to [0 60 30]",
+  "turn-roll": "3 lines, 0 triangles, 0 tetrahedra, 0 pending, 5 steps, box [0 0 0] to [0 60 30]",
+  "turn-yaw": "3 lines, 0 triangles, 0 tetrahedra, 0 pending, 5 steps, box [-51 0 0] to [0 51 0]",
+  "twist": "0 lines, 80 triangles, 0 tetrahedra, 0 pending, 322 steps, box [-101 0 -220] to [119 420 0]",
+}
+`;

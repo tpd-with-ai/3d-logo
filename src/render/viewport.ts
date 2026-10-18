@@ -3,12 +3,15 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { Bounds } from '../geometry/drawing';
 import type { Pose } from '../turtle/turtle';
 import { DrawingLayer } from './drawingLayer';
+import { FlyKeys } from './fly';
 import { labelSprite } from './label';
 import { TurtleModel } from './turtleModel';
 
 /** Default view direction: from the front-right, above the ground, looking toward the target. */
 const DEFAULT_DIRECTION = new THREE.Vector3(0.6, -1, 0.95).normalize();
 const MIN_RADIUS = 40;
+/** Fly speed in world units per second, per unit of framed scene radius (crosses the scene in ~2 s). */
+const FLY_SPEED_PER_RADIUS = 1;
 
 function niceStep(raw: number): number {
   const power = 10 ** Math.floor(Math.log10(raw));
@@ -37,6 +40,8 @@ export class Viewport {
   private readonly resizeObserver: ResizeObserver;
   /** Radius of the region the camera last framed; also sizes the turtle. */
   private radius = MIN_RADIUS;
+  private readonly fly = new FlyKeys();
+  private readonly removeListeners: () => void;
 
   constructor(private readonly container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -68,15 +73,100 @@ export class Viewport {
     this.rebuildGuides(MIN_RADIUS);
     this.resetCamera(null);
 
-    const loop = () => {
+    this.removeListeners = this.bindFlyKeys();
+
+    let last = performance.now();
+    const loop = (now: number) => {
       this.frameId = requestAnimationFrame(loop);
+      const seconds = (now - last) / 1000;
+      last = now;
+      if (this.fly.moving) this.flyStep(seconds);
       const moved = this.controls.update();
       if (moved || this.needsRender) {
         this.needsRender = false;
         this.renderer.render(this.scene, this.camera);
       }
     };
-    loop();
+    this.frameId = requestAnimationFrame(loop);
+  }
+
+  /**
+   * Keyboard flight (see ./fly.ts) listens only on the focusable viewport element, so typing in the
+   * editor or other controls never moves the camera. Held keys are dropped whenever focus or page
+   * visibility is lost.
+   */
+  private bindFlyKeys(): () => void {
+    const el = this.container;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (this.fly.press(event.code)) event.preventDefault();
+    };
+    const onKeyUp = (event: KeyboardEvent) => this.fly.release(event.code);
+    const clear = () => this.fly.clear();
+    const onVisibility = () => document.hidden && clear();
+    // Clicking or dragging in the view engages it for the keyboard.
+    const onPointerDown = () => el.focus({ preventScroll: true });
+    el.addEventListener('keydown', onKeyDown);
+    el.addEventListener('keyup', onKeyUp);
+    el.addEventListener('focusout', clear);
+    el.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('blur', clear);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      el.removeEventListener('keydown', onKeyDown);
+      el.removeEventListener('keyup', onKeyUp);
+      el.removeEventListener('focusout', clear);
+      el.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('blur', clear);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }
+
+  /**
+   * Moves the camera and the orbit target by the same offset, so the view direction and orbit
+   * distance are unchanged and the next mouse orbit pivots smoothly around the carried-along target.
+   */
+  private flyStep(seconds: number): void {
+    this.camera.updateMatrixWorld();
+    const forward = this.camera.getWorldDirection(new THREE.Vector3());
+    const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0).normalize();
+    const d = this.fly.displacement(
+      { forward, right, up: { x: 0, y: 0, z: 1 } },
+      seconds,
+      this.radius * FLY_SPEED_PER_RADIUS,
+    );
+    const offset = new THREE.Vector3(d.x, d.y, d.z);
+    this.camera.position.add(offset);
+    this.controls.target.add(offset);
+    this.invalidate();
+  }
+
+  /** Largest |x| or |y| of the bounds' corners in normalized device coordinates (≤ 1 = in view). */
+  ndcExtent(bounds: Bounds | null): number {
+    if (!bounds) return 0;
+    this.camera.updateMatrixWorld();
+    let extent = 0;
+    for (const x of [bounds.min.x, bounds.max.x])
+      for (const y of [bounds.min.y, bounds.max.y])
+        for (const z of [bounds.min.z, bounds.max.z]) {
+          const p = new THREE.Vector3(x, y, z).project(this.camera);
+          extent = Math.max(extent, Math.abs(p.x), Math.abs(p.y));
+        }
+    return extent;
+  }
+
+  /** Drops held fly keys (e.g. when a dialog opens over the view). */
+  stopFlying(): void {
+    this.fly.clear();
+  }
+
+  /** Camera position and orbit target, for browser tests. */
+  cameraState(): { position: number[]; target: number[]; direction: number[] } {
+    return {
+      position: this.camera.position.toArray(),
+      target: this.controls.target.toArray(),
+      direction: this.camera.getWorldDirection(new THREE.Vector3()).toArray(),
+    };
   }
 
   invalidate(): void {
@@ -151,6 +241,8 @@ export class Viewport {
 
   dispose(): void {
     cancelAnimationFrame(this.frameId);
+    this.removeListeners();
+    this.fly.clear();
     this.resizeObserver.disconnect();
     this.controls.dispose();
     this.drawing.dispose();

@@ -1,6 +1,7 @@
 import { COMMANDS, NAMED_COLORS } from '../lang/commands';
 import { EXAMPLES } from '../examples';
-import { axesDiagram, turnDiagram, type TurnKind } from './diagrams';
+import { MIZHAEV_SOURCE } from '../gallery/mizhaev';
+import { axesDiagram, tetraWindowDiagram, turnDiagram, type TurnKind } from './diagrams';
 
 const escape = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
@@ -120,18 +121,60 @@ export function helpHtml(): string {
       <tr><td><code>repeat <i>n</i> [ … ]</code></td><td>Run the block n times (n must be a whole number ≥ 0).</td></tr>
       <tr><td><code>repcount</code></td><td>Current pass of the innermost repeat: 1, 2, 3, …</td></tr>
       <tr><td><code>+ − * / ( )</code></td><td>Arithmetic in any input, e.g. <code>forward repcount * 2</code>.</td></tr>
+      <tr><td><code>sin(<i>deg</i>)</code> <code>cos(<i>deg</i>)</code></td><td>Sine and cosine of an angle in degrees, e.g. <code>forward 50 * sin(30)</code>.</td></tr>
     </tbody></table>
+    <p class="note">A minus sign glued to a number after a space starts a new input, as in UCBLogo:
+    <code>setpos 10 -5 0</code> is three inputs. Write <code>10 - 5</code> or <code>10-5</code> to subtract.</p>
 
-    <h3>Triangle mode</h3>
+    <h3>Drawing modes</h3>
+    <p>Every pen-down move generates one point: where the turtle ends up. The mode decides what the points draw.
+    Turns and pen-up moves generate no points.</p>
+    <table class="ref"><tbody>
+      <tr><td><code>lines</code></td><td>Each move draws a segment from where it started to where it ended (the default).</td></tr>
+      <tr><td><code>triangles</code></td><td>A sliding window of the last <b>3</b> points: each new point after the second makes a triangle with the two before it (a strip).</td></tr>
+      <tr><td><code>tetrahedra</code></td><td>A sliding window of the last <b>4</b> points: each new point after the third makes a closed tetrahedron with the three before it.</td></tr>
+    </tbody></table>
+    <div class="axes-guide">
+      ${tetraWindowDiagram()}
+      <ul class="window-list">
+        <li>Points 1–4 make faces <b>123, 124, 134, 234</b>, each turned to face outward.</li>
+        <li>Point 5 drops point 1: the next solid is 2–5. Neighbours share three points and are drawn as separate solids.</li>
+        <li>Four flat points make no solid; the status line counts them as skipped.</li>
+      </ul>
+    </div>
     <ul>
-      <li><code>triangles</code> starts a strip at the turtle’s position. Each pen-down move adds a point;
-      every point after the second makes a triangle with the two before it.</li>
-      <li>Turns and pen-up moves add no points. <code>penup</code> ends the strip; <code>pendown</code> starts a new one where the turtle is.</li>
-      <li>A triangle takes the color current when its third point is made. Leftover points (white dots) do not draw.</li>
+      <li>The window starts with the turtle’s position when you choose <code>triangles</code> or <code>tetrahedra</code>,
+      and again after <code>pendown</code>, <code>clear</code>, <code>reset</code>, or a <code>polygon</code>. <code>penup</code> or switching mode empties it, so shapes never join across a mode change.</li>
+      <li>A triangle or tetrahedron takes the color current when its last point is made. Points still waiting for a full window are shown as white dots and draw nothing.</li>
     </ul>
+    ${snippet('tetra-single', 'one tetrahedron')}
+
+    <h3>Faces and exact points</h3>
+    <table class="ref"><tbody>
+      <tr><td><code>polygon [ … ]</code></td><td>Fill one flat face. Its corners are the turtle’s start position and the end of every move inside the brackets
+      (pen and mode do not matter there). The corners must lie in one plane and the outline must not cross itself. Only the outline is drawn as edges.</td></tr>
+      <tr><td><code>setpos <i>x y z</i></code></td><td>Move straight to a world point; it draws like any move and keeps the orientation. Handy for data such as published coordinates.</td></tr>
+    </tbody></table>
+    <p class="note">The gallery’s <b>Mizhaev genus-3 polyhedron</b> uses both: eight flat nonagons from the integer coordinates in
+    ${MIZHAEV_SOURCE.author}, <a href="${MIZHAEV_SOURCE.url}" target="_blank" rel="noopener">“${MIZHAEV_SOURCE.title}”, ${MIZHAEV_SOURCE.arxiv}</a>.</p>
 
     <h3>Colors</h3>
     <p class="swatches">${swatches}</p>
-    <p>Or any hex value: <code>color #ff8800</code>, <code>color #f80</code>.</p>
+    <table class="ref"><tbody>
+      <tr><td><code>color #ff8800</code> or <code>#f80</code></td><td>Hex, 6 or 3 digits.</td></tr>
+      <tr><td><code>color rgb(<i>r</i>, <i>g</i>, <i>b</i>)</code></td><td>Red, green, blue from <b>0 to 255</b>; fractions round to the nearest whole number.</td></tr>
+      <tr><td><code>color hsv(<i>h</i>, <i>s</i>, <i>v</i>)</code></td><td>Hue in degrees (wraps: 360 = 0, −30 = 330); saturation and value in <b>percent, 0 to 100</b>.</td></tr>
+    </tbody></table>
+    <p class="note">Components may be any arithmetic, so <code>repeat 18 [ color hsv(repcount * 20, 80, 100) forward 10 yawright 20 ]</code> draws a rainbow.
+    Out-of-range components are errors, and a value between 0 and 1 for saturation or value is rejected because 0–100 is expected.</p>
+
+    <h3>Moving the camera</h3>
+    <table class="ref"><tbody>
+      <tr><td>Mouse / touch</td><td>Drag to orbit, right-drag or Shift-drag (two fingers on touch) to pan, scroll or pinch to zoom.</td></tr>
+      <tr><td>Fly <span class="alias">(view focused)</span></td><td>Click the view or Tab to it, then hold <kbd>W</kbd>/<kbd>S</kbd> to fly forward/back along your view,
+      <kbd>A</kbd>/<kbd>D</kbd> to slide left/right, <kbd>E</kbd>/<kbd>Q</kbd> to rise/sink. Hold <kbd>Shift</kbd> to go 3× faster.
+      The orbit centre travels with you, so dragging afterwards orbits around the spot in front of you. <kbd>Esc</kbd> or <kbd>Tab</kbd> leaves the view.</td></tr>
+      <tr><td>Other keys</td><td>Arrows pan, Shift+arrows orbit, <kbd>+</kbd>/<kbd>−</kbd> zoom, <kbd>F</kbd> fits the drawing.</td></tr>
+    </tbody></table>
   `;
 }

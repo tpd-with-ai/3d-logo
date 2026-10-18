@@ -8,9 +8,10 @@ import { add, cross, dot, normalize, scale, sub, vec, type Vec3 } from '../turtl
  * drawn from the same direction as the default 3D camera, so the pictures match the language.
  */
 
-const VIEW = normalize(vec(0.6, -1, 0.95)); // toward the camera
-const SCREEN_RIGHT = normalize(cross(scale(VIEW, -1), vec(0, 0, 1)));
-const SCREEN_UP = cross(SCREEN_RIGHT, scale(VIEW, -1));
+/** Unit vectors of the default camera view: VIEW points toward the camera. Shared with gallery thumbnails. */
+export const VIEW = normalize(vec(0.6, -1, 0.95));
+export const SCREEN_RIGHT = normalize(cross(scale(VIEW, -1), vec(0, 0, 1)));
+export const SCREEN_UP = cross(SCREEN_RIGHT, scale(VIEW, -1));
 const PX = 46; // pixels per turtle unit
 
 interface Item {
@@ -90,6 +91,28 @@ class Sketch {
     );
     this.label(at(sweep + 24, radius + 0.3), labels[0], color);
     this.label(at(-sweep - 24, radius + 0.3), labels[1], color);
+  }
+
+  /** A filled flat face (painter-sorted by its centre). */
+  face(pts: Vec3[], fill: string, opacity: number): void {
+    const depth = dot(scale(pts.reduce(add), 1 / pts.length), VIEW);
+    this.add(depth, `<path d="${this.path(pts)} Z" fill="${fill}" fill-opacity="${opacity}" stroke="none"/>`, ...pts);
+  }
+
+  edge(a: Vec3, b: Vec3, color: string, dashed = false): void {
+    const dash = dashed ? ' stroke-dasharray="4 3"' : '';
+    this.add(50, `<path d="${this.path([a, b])}" stroke="${color}" stroke-width="1.6" fill="none"${dash}/>`, a, b);
+  }
+
+  /** A dot with its label offset by [dx, dy] pixels. */
+  point(p: Vec3, text: string, color: string, [dx, dy]: [number, number]): void {
+    const [x, y] = project(p);
+    this.add(60, `<circle cx="${fmt(x)}" cy="${fmt(y)}" r="4" fill="${color}" stroke="#0b1020" stroke-width="1"/>`, p);
+    this.points.push([x + dx - 8, y + dy - 8], [x + dx + 8, y + dy + 8]);
+    this.items.push({
+      depth: 100,
+      svg: `<text x="${fmt(x + dx)}" y="${fmt(y + dy)}" fill="${color}" text-anchor="middle" dominant-baseline="middle">${text}</text>`,
+    });
   }
 
   label(at: Vec3, text: string, color: string): void {
@@ -179,4 +202,28 @@ export function turnDiagram(kind: TurnKind): string {
   s.arrow(O, scale(after.up, 1.4), AXIS_COLORS.up, { label: 'U' });
   s.arc(before.heading, before.up, 0.95, scale(before.heading, -2), '#e2e8f0', ['rollright', 'rollleft'], 80);
   return s.render('Roll: the turtle turns about its heading H. Ghost: before. Solid: after rollright 40.');
+}
+
+/**
+ * Tetrahedra mode: points 1–4 make the first solid (four faces shaded), and point 5 slides the
+ * window to 2–5, making the next solid (dashed).
+ */
+export function tetraWindowDiagram(): string {
+  const s = new Sketch('dg-tetra');
+  const p = [vec(0, 0, 0), vec(2.4, 0, 0), vec(1.2, 2, 0), vec(1.2, 0.7, 1.9), vec(3, 1.6, 1.5)];
+  const [a, b, c, d, e] = p;
+  const faces: [Vec3[], string][] = [
+    [[a, b, c], '#fb923c'],
+    [[a, b, d], '#f97316'],
+    [[a, c, d], '#fdba74'],
+    [[b, c, d], '#ea580c'],
+  ];
+  for (const [pts, fill] of faces) s.face(pts, fill, 0.55);
+  for (const [u, v] of [[a, b], [a, c], [a, d], [b, c], [b, d], [c, d]]) s.edge(u, v, '#fed7aa');
+  for (const u of [b, c, d]) s.edge(u, e, '#7dd3fc', true);
+  const offsets: [number, number][] = [[-12, -10], [0, 16], [8, -16], [0, -16], [10, -14]];
+  p.forEach((q, i) => s.point(q, String(i + 1), i === 4 ? '#7dd3fc' : '#fde68a', offsets[i]));
+  return s.render(
+    'Tetrahedra mode: points 1 to 4 form a closed tetrahedron with faces 123, 124, 134 and 234. Point 5 slides the window to points 2 to 5, which form the next tetrahedron, drawn dashed.',
+  );
 }

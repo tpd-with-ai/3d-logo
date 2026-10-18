@@ -271,8 +271,41 @@ select {
   white-space: nowrap;
   flex-shrink: 0;
 }
+.viewport:focus,
 .viewport:focus-visible {
+  outline: 3px solid var(--accent);
   outline-offset: -3px;
+  border-radius: 12px;
+}
+.fly-hint {
+  position: absolute;
+  right: 10px;
+  bottom: 34px;
+  display: none;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(8, 47, 73, 0.9);
+  border: 1px solid var(--accent-strong);
+  color: #e0f2fe;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.viewport:focus ~ .fly-hint {
+  display: block;
+}
+kbd {
+  display: inline-block;
+  min-width: 1.5em;
+  padding: 0 4px;
+  margin: 0 1px;
+  border: 1px solid #4b6a8f;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 0.85em;
+  text-align: center;
+  background: rgba(15, 23, 42, 0.8);
 }
 .view-toolbar {
   position: absolute;
@@ -332,6 +365,139 @@ select {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Example info bar (shown while an unedited example is loaded) */
+.example-info {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.example-info[hidden] {
+  display: none;
+}
+.example-info b {
+  color: var(--text);
+  margin-right: 4px;
+}
+.example-info a,
+.card-source {
+  color: var(--accent);
+}
+
+/* Accuracy badges */
+.badge {
+  display: inline-block;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.6;
+  vertical-align: 1px;
+  border: 1px solid;
+}
+.badge-exact {
+  color: #86efac;
+  border-color: rgba(134, 239, 172, 0.5);
+  background: rgba(20, 83, 45, 0.45);
+}
+.badge-approximation {
+  color: #fcd34d;
+  border-color: rgba(252, 211, 77, 0.5);
+  background: rgba(113, 63, 18, 0.45);
+}
+.badge-artistic {
+  color: #f0abfc;
+  border-color: rgba(240, 171, 252, 0.5);
+  background: rgba(112, 26, 117, 0.4);
+}
+.badge-lesson {
+  color: #93c5fd;
+  border-color: rgba(147, 197, 253, 0.5);
+  background: rgba(30, 58, 138, 0.45);
+}
+
+/* Gallery dialog */
+.gallery {
+  width: min(1180px, calc(100vw - 24px));
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  padding: 0;
+  margin: 12px 0 0;
+  list-style: none;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+.card-open {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.thumb {
+  width: 100%;
+  height: 132px;
+  border-radius: 8px;
+  background: #0e1424;
+  border: 1px solid transparent;
+}
+.card-open:hover .thumb,
+.card-open:focus-visible .thumb {
+  border-color: var(--accent);
+}
+.card-title {
+  font-weight: 600;
+  line-height: 1.3;
+}
+.card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.card-stats {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.card-desc {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.card-source {
+  font-size: 0.72rem;
+  line-height: 1.35;
 }
 
 /* Help dialog */
@@ -568,6 +734,12 @@ select {
 
 /* Narrow screens: stack the view above the code. */
 @media (max-width: 860px) {
+  .fly-hint {
+    top: 52px;
+    bottom: auto;
+    right: 8px;
+    font-size: 0.66rem;
+  }
   .layout {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(300px, 46dvh) minmax(380px, 1fr);
@@ -619,4 +791,13 @@ select {
   .btn-primary.is-running {
     animation: none;
   }
+}
+.window-list {
+  flex: 1;
+  min-width: 240px;
+  margin: 0;
+  padding-left: 18px;
+}
+.help-body a {
+  color: var(--accent);
 }

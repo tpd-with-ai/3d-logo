@@ -12,6 +12,7 @@ export type TokenType =
   | '-'
   | '*'
   | '/'
+  | ','
   | 'eof';
 
 export interface Token {
@@ -19,6 +20,11 @@ export interface Token {
   /** Original source text. Words keep their original case; compare with `lower`. */
   text: string;
   span: Span;
+  /**
+   * For '-': true when it is written like a sign (space or line start before it, no space after),
+   * as in `setpos 10 -5 3`. The parser then starts a new input there instead of subtracting.
+   */
+  sign?: boolean;
 }
 
 const SINGLE: Record<string, TokenType> = {
@@ -30,6 +36,7 @@ const SINGLE: Record<string, TokenType> = {
   '-': '-',
   '*': '*',
   '/': '/',
+  ',': ',',
 };
 
 /**
@@ -107,7 +114,13 @@ export function tokenize(source: string): Token[] {
     const single = SINGLE[ch];
     if (single) {
       i++;
-      tokens.push({ type: single, text: ch, span: span(start, 1) });
+      const token: Token = { type: single, text: ch, span: span(start, 1) };
+      if (ch === '-') {
+        const before = start === 0 ? ' ' : source[start - 1];
+        const after = source[i] ?? ' ';
+        token.sign = /[\s[(]/.test(before) && !/\s/.test(after);
+      }
+      tokens.push(token);
       continue;
     }
 

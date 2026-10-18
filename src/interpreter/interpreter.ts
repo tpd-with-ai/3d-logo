@@ -1,8 +1,10 @@
-import type { CommandStatement, Expr, Program, Statement } from '../lang/ast';
+import type { ColorArg, CommandStatement, Expr, Program, Statement } from '../lang/ast';
 import { LogoError, type Span } from '../lang/errors';
 import { parse } from '../lang/parser';
 import { DrawingBuilder, type DrawMode, type Drawing, type Segment, type Triangle } from '../geometry/drawing';
 import { HOME_POSE, move, pitch, roll, yaw, type Pose } from '../turtle/turtle';
+import { cosSinDeg, vec } from '../turtle/vec';
+import { ColorComponentError, hsvToHex, rgbToHex } from './color';
 
 /** A snapshot after one executed command, used by the playground to replay a run. */
 export interface Frame {
@@ -102,6 +104,7 @@ class Interpreter {
   block(statements: readonly Statement[]): void {
     for (const statement of statements) {
       if (statement.kind === 'repeat') this.repeat(statement.count, statement.body, statement.span);
+      else if (statement.kind === 'polygon') this.polygon(statement.body, statement.span);
       else this.command(statement);
     }
   }
@@ -131,6 +134,16 @@ class Interpreter {
     this.repcounts.pop();
   }
 
+  private polygon(body: readonly Statement[], span: Span): void {
+    this.tick(span);
+    this.drawing.beginPolygon();
+    this.block(body);
+    const problem = this.drawing.endPolygon();
+    if (problem) throw new LogoError('runtime', problem, span);
+    this.checkPrimitives(span);
+    this.record(span);
+  }
+
   private command(statement: CommandStatement): void {
     this.tick(statement.span);
     const d = this.drawing;
@@ -144,6 +157,12 @@ class Interpreter {
       case 'back':
         this.moveBy(-number());
         break;
+      case 'setpos': {
+        const [x, y, z] = statement.args.map((a) => this.evaluate(a as Expr));
+        this.pose = { ...this.pose, position: vec(x, y, z) };
+        d.moveTo(this.pose.position);
+        break;
+      }
       case 'home':
         this.pose = HOME_POSE;
         d.moveTo(HOME_POSE.position);
@@ -179,9 +198,14 @@ class Interpreter {
       case 'triangles':
         d.setMode('triangles');
         break;
-      case 'color':
-        if (arg.kind === 'color') d.setColor(arg.hex);
+      case 'tetrahedra':
+        d.setMode('tetrahedra');
         break;
+      case 'color':
+        d.setColor(this.color(arg as ColorArg));
+        break;
+      case 'polygon':
+        break; // handled as a block statement
       case 'clear':
         d.clear();
         break;
@@ -191,14 +215,30 @@ class Interpreter {
         break;
     }
 
-    if (d.primitiveCount > this.limits.maxPrimitives) {
+    this.checkPrimitives(statement.span);
+    this.record(statement.span);
+  }
+
+  private checkPrimitives(span: Span): void {
+    if (this.drawing.primitiveCount > this.limits.maxPrimitives) {
       throw new LogoError(
         'runtime',
         `Stopped: the drawing has more than ${this.limits.maxPrimitives.toLocaleString('en-US')} lines and triangles.`,
-        statement.span,
+        span,
       );
     }
-    this.record(statement.span);
+  }
+
+  /** Evaluates a color argument to canonical `#rrggbb`, reporting bad components where they are. */
+  private color(arg: ColorArg): string {
+    if (arg.form === 'hex') return arg.hex;
+    const values = arg.args.map((e) => this.evaluateRaw(e));
+    try {
+      return arg.form === 'rgb' ? rgbToHex(values[0], values[1], values[2]) : hsvToHex(values[0], values[1], values[2]);
+    } catch (error) {
+      if (error instanceof ColorComponentError) throw new LogoError('runtime', error.message, arg.args[error.component].span);
+      throw error;
+    }
   }
 
   private moveBy(distance: number): void {
@@ -236,6 +276,11 @@ class Interpreter {
         return this.repcounts[this.repcounts.length - 1];
       case 'negate':
         return -this.evaluate(expr.operand);
+      case 'call': {
+        // Degrees, exact at multiples of 90 like the turtle's own turns.
+        const [c, sn] = cosSinDeg(this.evaluate(expr.arg));
+        return expr.fn === 'sin' ? sn : c;
+      }
       case 'binary': {
         const left = this.evaluate(expr.left);
         const right = this.evaluate(expr.right);

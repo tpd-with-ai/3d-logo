@@ -1,5 +1,5 @@
-import type { ColorArg, Expr, Program, Statement } from './ast';
-import { findCommand, NAMED_COLORS, RESERVED_WORDS } from './commands';
+import type { ColorArg, CommandStatement, Expr, Program, Statement } from './ast';
+import { findCommand, FUNCTIONS, NAMED_COLORS, RESERVED_WORDS } from './commands';
 import { LogoError, suggest, type Span } from './errors';
 import { tokenize, type Token } from './lexer';
 
@@ -15,9 +15,14 @@ function cover(from: Span, to: Span): Span {
 const argHint = (kind: 'distance' | 'angle', word: string) =>
   kind === 'distance' ? `a distance, e.g. ${word} 50` : `an angle in degrees, e.g. ${word} 90`;
 
+/** Commands that make no sense while a polygon is being collected. */
+const NOT_IN_POLYGON = new Set(['clear', 'reset', 'polygon']);
+
 class Parser {
   private index = 0;
   private repeatDepth = 0;
+  private parenDepth = 0;
+  private polygonDepth = 0;
 
   constructor(private readonly tokens: Token[]) {}
 
@@ -47,9 +52,10 @@ class Parser {
   private statement(): Statement {
     const token = this.next();
     if (token.type !== 'word') {
-      if (token.type === 'number') {
+      if (token.type === 'number' || (token.type === '-' && this.peek().type === 'number')) {
+        const text = token.type === '-' ? `-${this.peek().text}` : token.text;
         this.fail(
-          `Unexpected number ${token.text}. Each command takes at most one input; did you forget a command name?`,
+          `Unexpected number ${text}. Check how many inputs the command before it takes; did you forget a command name?`,
           token.span,
         );
       }
@@ -58,8 +64,8 @@ class Parser {
 
     const word = token.text.toLowerCase();
     if (word === 'repeat') return this.repeat(token);
-    if (word === 'repcount') {
-      this.fail("'repcount' is a number, not a command. Use it as an input, e.g. forward repcount.", token.span);
+    if (word === 'repcount' || (FUNCTIONS as readonly string[]).includes(word)) {
+      this.fail(`'${word}' gives a number; use it as an input, e.g. forward ${word === 'repcount' ? 'repcount' : `10 * ${word}(30)`}.`, token.span);
     }
 
     const command = findCommand(word);
@@ -67,20 +73,48 @@ class Parser {
       const hint = suggest(word, RESERVED_WORDS);
       this.fail(`Unknown command '${token.text}'.${hint ? ` Did you mean '${hint}'?` : ''}`, token.span);
     }
-
-    if (command.arg === 'none') return { kind: 'command', name: command.name, args: [], span: token.span };
-
-    if (command.arg === 'color') {
-      const color = this.colorArg(token);
-      return { kind: 'command', name: command.name, args: [color], span: cover(token.span, color.span) };
+    if (this.polygonDepth > 0 && NOT_IN_POLYGON.has(command.name)) {
+      this.fail(`'${command.name}' cannot be used inside a polygon block.`, token.span);
     }
 
-    if (!this.startsExpression(this.peek())) {
-      const word = token.text.toLowerCase();
-      this.fail(`'${word}' needs ${argHint(command.arg, word)}.`, token.span);
+    switch (command.arg) {
+      case 'none':
+        return { kind: 'command', name: command.name, args: [], span: token.span };
+      case 'block':
+        return this.polygon(token);
+      case 'color': {
+        const color = this.colorArg(token);
+        return { kind: 'command', name: command.name, args: [color], span: cover(token.span, color.span) };
+      }
+      case 'point': {
+        const args: Expr[] = [];
+        for (let i = 0; i < 3; i++) {
+          if (!this.startsExpression(this.peek())) {
+            this.fail(`'${word}' needs three numbers x y z, e.g. ${word} 0 -50 20 (it got ${i}).`, token.span);
+          }
+          args.push(this.expression());
+        }
+        return { kind: 'command', name: command.name, args, span: cover(token.span, args[2].span) };
+      }
+      default: {
+        if (!this.startsExpression(this.peek())) this.fail(`'${word}' needs ${argHint(command.arg, word)}.`, token.span);
+        const arg = this.expression();
+        return { kind: 'command', name: command.name, args: [arg], span: cover(token.span, arg.span) } satisfies CommandStatement;
+      }
     }
-    const arg = this.expression();
-    return { kind: 'command', name: command.name, args: [arg], span: cover(token.span, arg.span) };
+  }
+
+  private block(keyword: Token, usage: string): { body: Statement[]; close: Token } {
+    const open = this.next();
+    if (open.type !== '[') {
+      this.fail(`'${keyword.text.toLowerCase()}' needs a [ block ], e.g. ${usage}.`, open.type === 'eof' ? keyword.span : open.span);
+    }
+    const body: Statement[] = [];
+    while (this.peek().type !== ']') {
+      if (this.peek().type === 'eof') this.fail("This '[' is never closed. Add a matching ']'.", open.span);
+      body.push(this.statement());
+    }
+    return { body, close: this.next() };
   }
 
   private repeat(keyword: Token): Statement {
@@ -88,20 +122,44 @@ class Parser {
       this.fail("'repeat' needs a count and a block, e.g. repeat 4 [ forward 50 right 90 ].", keyword.span);
     }
     const count = this.expression();
-    const open = this.next();
-    if (open.type !== '[') {
-      this.fail("'repeat' needs a [ block ] after the count.", open.type === 'eof' ? keyword.span : open.span);
-    }
-
     this.repeatDepth++;
-    const body: Statement[] = [];
-    while (this.peek().type !== ']') {
-      if (this.peek().type === 'eof') this.fail("This '[' is never closed. Add a matching ']'.", open.span);
-      body.push(this.statement());
-    }
-    const close = this.next();
+    const { body, close } = this.block(keyword, 'repeat 4 [ forward 50 right 90 ]');
     this.repeatDepth--;
     return { kind: 'repeat', count, body, span: cover(keyword.span, close.span) };
+  }
+
+  private polygon(keyword: Token): Statement {
+    this.polygonDepth++;
+    const { body, close } = this.block(keyword, 'polygon [ repeat 4 [ forward 50 right 90 ] ]');
+    this.polygonDepth--;
+    return { kind: 'polygon', body, span: cover(keyword.span, close.span) };
+  }
+
+  /** `name ( expr {, expr} )` with exactly `arity` comma-separated arguments. */
+  private callArgs(name: Token, arity: number, example: string): { args: Expr[]; close: Token } {
+    const word = name.text.toLowerCase();
+    const open = this.next();
+    if (open.type !== '(') this.fail(`'${word}' needs parentheses, e.g. ${example}.`, name.span);
+    this.parenDepth++;
+    const args: Expr[] = [];
+    for (;;) {
+      if (this.peek().type === ')' && args.length === 0) break;
+      args.push(this.expression());
+      const sep = this.peek();
+      if (sep.type === ',') {
+        this.next();
+        continue;
+      }
+      if (sep.type === ')') break;
+      const found = sep.type === 'eof' ? 'the end of the program' : `'${sep.text}'`;
+      this.fail(`Separate the values of '${word}' with commas and close it with ')', e.g. ${example}; found ${found}.`, sep.type === 'eof' ? open.span : sep.span);
+    }
+    const close = this.next();
+    this.parenDepth--;
+    if (args.length !== arity) {
+      this.fail(`'${word}' takes ${arity} value${arity === 1 ? '' : 's'} but got ${args.length}, e.g. ${example}.`, cover(name.span, close.span));
+    }
+    return { args, close };
   }
 
   private colorArg(command: Token): ColorArg {
@@ -110,37 +168,50 @@ class Parser {
       this.next();
       let hex = token.text.toLowerCase();
       if (hex.length === 4) hex = `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
-      return { kind: 'color', hex, span: token.span };
+      return { kind: 'color', form: 'hex', hex, span: token.span };
     }
-    if (token.type === 'word' && !findCommand(token.text.toLowerCase()) && token.text.toLowerCase() !== 'repeat') {
+    const name = token.type === 'word' ? token.text.toLowerCase() : '';
+    if (name === 'rgb' || name === 'hsv') {
       this.next();
-      const name = token.text.toLowerCase();
+      const example = name === 'rgb' ? 'rgb(255, 128, 0)' : 'hsv(30, 100, 100)';
+      const { args, close } = this.callArgs(token, 3, example);
+      return { kind: 'color', form: name, args: args as [Expr, Expr, Expr], span: cover(token.span, close.span) };
+    }
+    if (token.type === 'word' && !findCommand(name) && name !== 'repeat') {
+      this.next();
       const hex = NAMED_COLORS[name];
       if (!hex) {
-        const hint = suggest(name, Object.keys(NAMED_COLORS));
+        const hint = suggest(name, [...Object.keys(NAMED_COLORS), 'rgb', 'hsv']);
         this.fail(
-          `Unknown color '${token.text}'.${hint ? ` Did you mean '${hint}'?` : ''} Use a name like red or a hex value like #ff8800.`,
+          `Unknown color '${token.text}'.${hint ? ` Did you mean '${hint}'?` : ''} Use a name like red, #ff8800, rgb(255, 128, 0), or hsv(30, 100, 100).`,
           token.span,
         );
       }
-      return { kind: 'color', hex, span: token.span };
+      return { kind: 'color', form: 'hex', hex, span: token.span };
     }
-    this.fail("'color' needs a color name or hex value, e.g. color red or color #ff8800.", command.span);
+    this.fail("'color' needs a color: a name (red), hex (#ff8800), rgb(255, 128, 0), or hsv(30, 100, 100).", command.span);
   }
 
   private startsExpression(token: Token): boolean {
-    return (
-      token.type === 'number' ||
-      token.type === '(' ||
-      token.type === '-' ||
-      (token.type === 'word' && token.text.toLowerCase() === 'repcount')
-    );
+    if (token.type === 'number' || token.type === '(' || token.type === '-') return true;
+    if (token.type !== 'word') return false;
+    const word = token.text.toLowerCase();
+    return word === 'repcount' || (FUNCTIONS as readonly string[]).includes(word);
+  }
+
+  /**
+   * A '-' written like a sign (`10 -5`) ends the current input instead of subtracting, so
+   * `setpos 10 -5 3` has three inputs. Inside parentheses it always subtracts.
+   */
+  private continuesWithMinus(): boolean {
+    const token = this.peek();
+    return token.type === '-' && (!token.sign || this.parenDepth > 0);
   }
 
   // expr = term { ("+" | "-") term }
   private expression(): Expr {
     let left = this.term();
-    while (this.peek().type === '+' || this.peek().type === '-') {
+    while (this.peek().type === '+' || this.continuesWithMinus()) {
       const op = this.next().type as '+' | '-';
       const right = this.term();
       left = { kind: 'binary', op, left, right, span: cover(left.span, right.span) };
@@ -169,21 +240,31 @@ class Parser {
     return this.primary();
   }
 
-  // primary = NUMBER | "repcount" | "(" expr ")"
+  // primary = NUMBER | "repcount" | ("sin" | "cos") "(" expr ")" | "(" expr ")"
   private primary(): Expr {
     const token = this.next();
     if (token.type === 'number') return { kind: 'number', value: Number(token.text), span: token.span };
-    if (token.type === 'word' && token.text.toLowerCase() === 'repcount') {
+    const word = token.type === 'word' ? token.text.toLowerCase() : '';
+    if (word === 'repcount') {
       if (this.repeatDepth === 0) this.fail("'repcount' can only be used inside a repeat block.", token.span);
       return { kind: 'repcount', span: token.span };
     }
+    if (word === 'sin' || word === 'cos') {
+      const { args, close } = this.callArgs(token, 1, `${word}(30)`);
+      return { kind: 'call', fn: word, arg: args[0], span: cover(token.span, close.span) };
+    }
     if (token.type === '(') {
+      this.parenDepth++;
       const inner = this.expression();
+      this.parenDepth--;
       const close = this.next();
       if (close.type !== ')') this.fail("Missing ')' to close this '('.", token.span);
       return { ...inner, span: cover(token.span, close.span) };
     }
     const found = token.type === 'eof' ? 'the end of the program' : `'${token.text}'`;
-    this.fail(`Expected a number, 'repcount', or '(' but found ${found}.`, token.type === 'eof' ? this.tokens[this.index - 1]?.span ?? token.span : token.span);
+    this.fail(
+      `Expected a number, 'repcount', sin(…), cos(…), or '(' but found ${found}.`,
+      token.type === 'eof' ? (this.tokens[this.index - 1]?.span ?? token.span) : token.span,
+    );
   }
 }

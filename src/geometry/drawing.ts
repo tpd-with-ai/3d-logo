@@ -1,7 +1,8 @@
 import { DEFAULT_COLOR } from '../lang/commands';
-import { cross, equals, length, normalize, sub, vec, type Vec3 } from '../turtle/vec';
+import { fillPolygon } from './polygon';
+import { cross, dot, equals, length, normalize, scale, sub, vec, type Vec3 } from '../turtle/vec';
 
-export type DrawMode = 'lines' | 'triangles';
+export type DrawMode = 'lines' | 'triangles' | 'tetrahedra';
 
 export interface Segment {
   readonly a: Vec3;
@@ -14,17 +15,26 @@ export interface Triangle {
   readonly a: Vec3;
   readonly b: Vec3;
   readonly c: Vec3;
-  /** Unit face normal, (b − a) × (c − a) normalized: the right-hand rule over a → b → c. */
+  /** Unit face normal by the right-hand rule over a → b → c (for polygons: the polygon's normal). */
   readonly normal: Vec3;
   readonly color: string;
+  /**
+   * Which edges are outline edges, as bits: 1 = a–b, 2 = b–c, 4 = c–a. Triangles cut from a
+   * polygon leave their interior diagonals out so only the polygon's outline is drawn.
+   */
+  readonly edges: number;
 }
 
 /** The visible result of a program. */
 export interface Drawing {
   readonly segments: readonly Segment[];
   readonly triangles: readonly Triangle[];
-  /** Points of the current strip that are not part of any triangle yet (0–2 points). */
+  /** Points of the current window that are not part of any triangle or tetrahedron yet (0–3). */
   readonly pendingPoints: readonly Vec3[];
+  /** Tetrahedra drawn (each is four of the triangles). */
+  readonly tetrahedra: number;
+  /** Four-point windows skipped because the points were flat (zero volume), over the whole run. */
+  readonly skippedTetrahedra: number;
 }
 
 /**
@@ -44,6 +54,19 @@ export interface Drawing {
  *   - A strip with fewer than three points never draws; its points are reported as
  *     `pendingPoints`. Once a strip has formed a triangle, nothing is pending.
  *
+ * Tetrahedra mode: the same window rules as triangle mode, but the window holds four points.
+ *   Each new point after the third makes a closed tetrahedron from the last four points
+ *   a, b, c, d: four triangles on the vertex sets abc, abd, acd, bcd, each wound so its normal
+ *   points away from the fourth vertex (outward). Consecutive tetrahedra share three points and
+ *   are independent geometry (their common face is drawn by both). Four points that are flat
+ *   (|volume| tiny relative to their size) make no tetrahedron and are counted in
+ *   `skippedTetrahedra`.
+ *
+ * Polygon blocks: between `beginPolygon` and `endPolygon`, moves only collect corners (the
+ * start position plus each move's end point, regardless of pen and mode); nothing else is drawn.
+ * `endPolygon` fills the corners as one flat face, cut into triangles that share the polygon's
+ * normal and color, then restarts any triangle strip so faces never connect to each other.
+ *
  * `clear` hides everything emitted so far; primitives stay in the append-only arrays so the
  * playground can replay a run step by step.
  */
@@ -60,8 +83,13 @@ export class DrawingBuilder {
 
   private cursor: Vec3;
   private window: Vec3[] = [];
-  /** Whether the current strip has completed a group of three yet. */
+  /** Corners of the polygon being collected, or null outside a polygon block. */
+  private polygon: Vec3[] | null = null;
+  /** Whether the current window has completed a group (triangle or tetrahedron) yet. */
   private stripCompleted = false;
+  /** Tetrahedra emitted since the last clear, and flat windows skipped this run. */
+  tetrahedronCount = 0;
+  skippedTetrahedra = 0;
 
   constructor(start: Vec3) {
     this.cursor = start;
@@ -78,6 +106,10 @@ export class DrawingBuilder {
   moveTo(to: Vec3): void {
     const from = this.cursor;
     this.cursor = to;
+    if (this.polygon) {
+      this.polygon.push(to);
+      return;
+    }
     if (!this.penDown) return;
 
     if (this.mode === 'lines') {
@@ -86,12 +118,61 @@ export class DrawingBuilder {
     }
 
     this.window.push(to);
-    if (this.window.length < 3) return;
-    const [a, b, c] = this.window;
+    const size = this.mode === 'tetrahedra' ? 4 : 3;
+    if (this.window.length < size) return;
+    const points = [...this.window];
     this.window.shift();
     this.stripCompleted = true;
+    if (size === 4) {
+      this.tetrahedron(points);
+      return;
+    }
+    const [a, b, c] = points;
     const n = cross(sub(b, a), sub(c, a));
-    if (length(n) > 1e-9) this.triangles.push({ a, b, c, normal: normalize(n), color: this.color });
+    if (length(n) > 1e-9) this.triangles.push({ a, b, c, normal: normalize(n), color: this.color, edges: 7 });
+  }
+
+  private tetrahedron([a, b, c, d]: Vec3[]): void {
+    const volume6 = dot(sub(b, a), cross(sub(c, a), sub(d, a)));
+    const size = Math.max(...[[a, b], [a, c], [a, d], [b, c], [b, d], [c, d]].map(([p, q]) => length(sub(p, q))));
+    if (Math.abs(volume6) <= 1e-9 * size ** 3) {
+      this.skippedTetrahedra++;
+      return;
+    }
+    this.tetrahedronCount++;
+    // Faces in the order ABC, ABD, ACD, BCD; each is flipped if needed so it faces away from
+    // the vertex it does not contain.
+    const faces: [Vec3, Vec3, Vec3, Vec3][] = [[a, b, c, d], [a, b, d, c], [a, c, d, b], [b, c, d, a]];
+    for (const [p, q0, r0, opposite] of faces) {
+      let [q, r] = [q0, r0];
+      let n = cross(sub(q, p), sub(r, p));
+      if (dot(n, sub(opposite, p)) > 0) {
+        [q, r] = [r, q];
+        n = scale(n, -1);
+      }
+      this.triangles.push({ a: p, b: q, c: r, normal: normalize(n), color: this.color, edges: 7 });
+    }
+  }
+
+  beginPolygon(): void {
+    this.polygon = [this.cursor];
+  }
+
+  /** Fills the collected corners. Returns a friendly reason if they do not form a flat polygon. */
+  endPolygon(): string | undefined {
+    const points = this.polygon ?? [];
+    this.polygon = null;
+    this.restartStrip();
+    const face = fillPolygon(points);
+    if (typeof face === 'string') return face;
+    const n = face.corners.length;
+    const outline = (i: number, j: number) => (j === (i + 1) % n || i === (j + 1) % n ? 1 : 0);
+    for (const [i, j, k] of face.triangles) {
+      const [a, b, c] = [face.corners[i], face.corners[j], face.corners[k]];
+      const edges = outline(i, j) | (outline(j, k) << 1) | (outline(k, i) << 2);
+      this.triangles.push({ a, b, c, normal: face.normal, color: this.color, edges });
+    }
+    return undefined;
   }
 
   setPen(down: boolean): void {
@@ -112,6 +193,7 @@ export class DrawingBuilder {
   clear(): void {
     this.segmentStart = this.segments.length;
     this.triangleStart = this.triangles.length;
+    this.tetrahedronCount = 0;
     this.restartStrip();
   }
 
@@ -129,11 +211,13 @@ export class DrawingBuilder {
       segments: this.segments.slice(this.segmentStart),
       triangles: this.triangles.slice(this.triangleStart),
       pendingPoints: [...this.pendingPoints],
+      tetrahedra: this.tetrahedronCount,
+      skippedTetrahedra: this.skippedTetrahedra,
     };
   }
 
   private restartStrip(): void {
-    this.window = this.penDown && this.mode === 'triangles' ? [this.cursor] : [];
+    this.window = this.penDown && this.mode !== 'lines' ? [this.cursor] : [];
     this.stripCompleted = false;
   }
 }

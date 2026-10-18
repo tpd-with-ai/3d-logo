@@ -145,10 +145,9 @@ export class DrawingLayer {
       normals.set([n.x, n.y, n.z, n.x, n.y, n.z, n.x, n.y, n.z], i * 9);
       color.setStyle(t.color);
       colors.set([color.r, color.g, color.b, color.r, color.g, color.b, color.r, color.g, color.b], i * 9);
-      edgePositions.set(
-        [a.x, a.y, a.z, b.x, b.y, b.z, b.x, b.y, b.z, c.x, c.y, c.z, c.x, c.y, c.z, a.x, a.y, a.z],
-        i * 18,
-      );
+      // Edges left out of the outline (polygon diagonals) collapse to invisible zero-length lines.
+      const edge = (bit: number, p: typeof a, q: typeof a) => (t.edges & bit ? [p.x, p.y, p.z, q.x, q.y, q.z] : [p.x, p.y, p.z, p.x, p.y, p.z]);
+      edgePositions.set([...edge(1, a, b), ...edge(2, b, c), ...edge(4, c, a)], i * 18);
     });
 
     this.mesh.geometry.dispose();
