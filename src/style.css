@@ -336,7 +336,7 @@ select {
 
 /* Help dialog */
 .help {
-  width: min(720px, calc(100vw - 24px));
+  width: min(980px, calc(100vw - 24px));
   max-height: min(86vh, 900px);
   padding: 0;
   border: 1px solid var(--border);
@@ -432,6 +432,140 @@ select {
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
+/* Turtle axis colors (match src/render/palette.ts) */
+.ax-h {
+  color: #fbbf24;
+}
+.ax-l {
+  color: #f472b6;
+}
+.ax-u {
+  color: #a78bfa;
+}
+.hud-key.ax-h,
+.hud-key.ax-l,
+.hud-key.ax-u {
+  font-weight: 700;
+}
+
+/* Help: visual turn guide */
+.diagram {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  overflow: visible;
+}
+.axes-guide {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 28px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #0e1424;
+}
+.axes-guide .diagram {
+  margin: 0;
+  width: 300px;
+}
+.axes-list {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  flex: 1;
+  min-width: 240px;
+}
+.axes-list dt {
+  font-family: var(--mono);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.axes-list dd {
+  margin: 0;
+}
+.help-body .note {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.turn-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 12px;
+}
+.turn-card {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #0e1424;
+}
+.turn-card figcaption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.turn-card h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+.turn-axis {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.turn-card .diagram {
+  width: 250px;
+  min-height: 150px;
+}
+.diagram-key {
+  margin: 0;
+  text-align: center;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+.turn-card td:first-child {
+  width: 1%;
+}
+.snippet {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #0a0f1c;
+  border: 1px solid #1e2840;
+  white-space: pre-wrap;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.snippet code {
+  color: #cbd5e1 !important;
+}
+.try {
+  align-self: flex-start;
+}
+.combined {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.combined p {
+  margin-top: 0;
+}
+.combined > div:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 /* Narrow screens: stack the view above the code. */
 @media (max-width: 860px) {
   .layout {
@@ -472,6 +606,12 @@ select {
   }
   select {
     max-width: 170px;
+  }
+  .combined {
+    grid-template-columns: 1fr;
+  }
+  .help-body td:first-child {
+    white-space: normal;
   }
 }
 

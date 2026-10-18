@@ -12,7 +12,8 @@ function cover(from: Span, to: Span): Span {
   return { ...from, length: to.offset + to.length - from.offset };
 }
 
-const ARG_HINT = { distance: 'a distance, e.g. forward 50', angle: 'an angle in degrees, e.g. left 90' };
+const argHint = (kind: 'distance' | 'angle', word: string) =>
+  kind === 'distance' ? `a distance, e.g. ${word} 50` : `an angle in degrees, e.g. ${word} 90`;
 
 class Parser {
   private index = 0;
@@ -75,7 +76,8 @@ class Parser {
     }
 
     if (!this.startsExpression(this.peek())) {
-      this.fail(`'${command.name}' needs ${ARG_HINT[command.arg]}.`, token.span);
+      const word = token.text.toLowerCase();
+      this.fail(`'${word}' needs ${argHint(command.arg, word)}.`, token.span);
     }
     const arg = this.expression();
     return { kind: 'command', name: command.name, args: [arg], span: cover(token.span, arg.span) };

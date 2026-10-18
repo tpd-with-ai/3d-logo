@@ -53,15 +53,20 @@ export class App {
     const saved = localStorage.getItem(STORAGE_KEY);
     this.editor = new Editor({
       parent: $('editor'),
-      doc: saved ?? EXAMPLES[0].code,
+      doc: saved ?? EXAMPLES.find((e) => e.id === 'square')!.code,
       label: 'Logo program',
       onRun: () => this.run(true),
       onStop: () => this.stop(),
       onChange: (doc) => this.onEdit(doc),
     });
 
-    for (const example of EXAMPLES) this.ui.examples.add(new Option(example.title, example.id));
-    this.ui.examples.add(new Option('— choose —', ''), 0);
+    this.ui.examples.add(new Option('— choose —', ''));
+    for (const group of new Set(EXAMPLES.map((e) => e.group))) {
+      const optgroup = document.createElement('optgroup');
+      optgroup.label = group;
+      for (const example of EXAMPLES.filter((e) => e.group === group)) optgroup.append(new Option(example.title, example.id));
+      this.ui.examples.append(optgroup);
+    }
     this.ui.examples.value = '';
 
     this.bindControls();
@@ -77,18 +82,16 @@ export class App {
     ui.run.addEventListener('click', () => this.run(true));
     ui.step.addEventListener('click', () => this.step());
     ui.stop.addEventListener('click', () => this.stop());
-    ui.examples.addEventListener('change', () => {
-      const example = EXAMPLES.find((e) => e.id === ui.examples.value);
-      if (!example) return;
-      this.editor.setDoc(example.code);
-      this.run(true, true, true);
-    });
+    ui.examples.addEventListener('change', () => this.loadExample(ui.examples.value));
     $('fit').addEventListener('click', () => this.viewport.frame(this.bounds));
     $('reset-view').addEventListener('click', () => this.viewport.resetCamera(this.bounds));
     $('zoom-in').addEventListener('click', () => this.viewport.zoom(0.8));
     $('zoom-out').addEventListener('click', () => this.viewport.zoom(1.25));
     $<HTMLInputElement>('guides').addEventListener('change', (e) =>
       this.viewport.setGuidesVisible((e.target as HTMLInputElement).checked),
+    );
+    $<HTMLInputElement>('turtle-axes').addEventListener('change', (e) =>
+      this.viewport.setTurtleAxesVisible((e.target as HTMLInputElement).checked),
     );
     $('clear').addEventListener('click', () => this.clearView());
     $('error-jump').addEventListener('click', () => {
@@ -107,8 +110,21 @@ export class App {
     $('help-open').addEventListener('click', () => help.showModal());
     $('help-close').addEventListener('click', () => help.close());
     help.addEventListener('click', (event) => {
-      if (event.target === help) help.close();
+      if (event.target === help) return help.close();
+      // "Try it" buttons replay a mini-example at Medium speed so the turns are visible.
+      const id = (event.target as HTMLElement).closest<HTMLElement>('[data-example]')?.dataset.example;
+      if (!id) return;
+      help.close();
+      this.loadExample(id, 40);
     });
+  }
+
+  private loadExample(id: string, speed?: number): void {
+    const example = EXAMPLES.find((e) => e.id === id);
+    if (!example) return;
+    this.editor.setDoc(example.code);
+    this.ui.examples.value = id; // setDoc's edit handler resets the picker
+    this.run(true, true, true, speed);
   }
 
   private onEdit(doc: string): void {
@@ -123,7 +139,7 @@ export class App {
    * Runs the program. The interpreter always executes immediately; `animate` only controls
    * whether the finished run is replayed frame by frame at the chosen speed.
    */
-  run(animate: boolean, refit = animate, resetCamera = false): void {
+  run(animate: boolean, refit = animate, resetCamera = false, speedOverride?: number): void {
     window.clearTimeout(this.liveTimer);
     this.cancelPlayback();
     const started = performance.now();
@@ -142,9 +158,10 @@ export class App {
     }
 
     this.viewport.drawing.setPrimitives(result.allSegments, result.allTriangles);
-    const speed = Number(this.ui.speed.value);
+    const speed = speedOverride ?? Number(this.ui.speed.value);
     if (animate && speed > 0 && result.frames.length > 0 && !result.framesTruncated) {
-      this.startPlayback(result, true);
+      if (resetCamera) this.viewport.resetCamera(drawingBounds(result.drawing));
+      this.startPlayback(result, true, speed);
       return;
     }
     this.showFinal(result, refit, resetCamera, elapsed);
@@ -156,7 +173,7 @@ export class App {
       this.run(false);
       const result = this.result;
       if (!result || result.error?.kind === 'syntax' || result.frames.length === 0) return;
-      this.startPlayback(result, false);
+      this.startPlayback(result, false, 0);
     }
     const playback = this.playback;
     if (!playback) return;
@@ -186,7 +203,7 @@ export class App {
     this.setStatus('Cleared. Press Run to draw again.');
   }
 
-  private startPlayback(result: RunResult, playing: boolean): void {
+  private startPlayback(result: RunResult, playing: boolean, perSecond: number): void {
     const playback: Playback = { result, index: -1, playing, rafId: 0, lastTime: performance.now(), budget: 0 };
     this.playback = playback;
     this.viewport.drawing.show({ segmentStart: 0, segmentEnd: 0, triangleStart: 0, triangleEnd: 0 });
@@ -195,7 +212,6 @@ export class App {
     this.updateButtons();
     if (!playing) return;
     const tick = (now: number) => {
-      const perSecond = Number(this.ui.speed.value) || 1000;
       playback.budget += ((now - playback.lastTime) / 1000) * perSecond;
       playback.lastTime = now;
       const steps = Math.floor(playback.budget);
@@ -271,7 +287,8 @@ export class App {
     const color = result?.color ?? '';
     this.ui.hud.innerHTML = `
       <div><span class="hud-key">pos</span> ${fmtVec(pose.position)}</div>
-      <div><span class="hud-key">H</span> ${fmtVec(pose.heading)} <span class="hud-key">U</span> ${fmtVec(pose.up)}</div>
+      <div><span class="hud-key ax-h">H</span> ${fmtVec(pose.heading)}</div>
+      <div><span class="hud-key ax-l">L</span> ${fmtVec(pose.left)} <span class="hud-key ax-u">U</span> ${fmtVec(pose.up)}</div>
       ${result && !this.playback ? `<div><span class="hud-key">pen</span> ${pen} · ${result.mode} · <span class="hud-swatch" style="background:${color}"></span>${color}</div>` : ''}
       <div class="hud-dim">grid cell ${fmt(this.viewport.gridStep)} units</div>`;
   }

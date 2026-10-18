@@ -48,12 +48,12 @@ comment   = ";" { any character except newline } ;
 | `forward d` | `fd` | distance | Move `d` units along the heading **H**. |
 | `back d` | `bk` | distance | Move `d` units along **−H**. |
 | `home` | | | Move to the origin (a normal move: draws if the pen is down), then restore the home orientation. |
-| `left a` | `lt` | angle | Yaw: rotate **H** toward **L** about **U**. |
-| `right a` | `rt` | angle | Yaw the other way: `right a` = `left −a`. |
-| `climb a` | | angle | Pitch: rotate **H** toward **U** about **L** (nose up). |
-| `dive a` | | angle | `dive a` = `climb −a` (nose down). |
-| `rollright a` | `rr` | angle | Roll about **H**: **L** rotates toward **U**, so the right wing goes down. |
-| `rollleft a` | `rl` | angle | `rollleft a` = `rollright −a`. |
+| `yawleft a` | `left`, `lt` | angle | Yaw about the current **U**: the nose swings toward **L**. |
+| `yawright a` | `right`, `rt` | angle | Yaw about the current **U**: the nose swings toward **R**. `yawright a` = `yawleft −a`. |
+| `pitchup a` | `climb` | angle | Pitch about the current wing axis **R**–**L**: the nose rises toward **U**. |
+| `pitchdown a` | `dive` | angle | Pitch the other way: the nose drops. `pitchdown a` = `pitchup −a`. |
+| `rollleft a` | `rl` | angle | Roll about the current **H**: the left wing drops. `rollleft a` = `rollright −a`. |
+| `rollright a` | `rr` | angle | Roll about the current **H**: the right wing drops. |
 | `penup` | `pu` | | Moves stop drawing. |
 | `pendown` | `pd` | | Moves draw again. |
 | `lines` | | | Switch to line mode (the default). |
@@ -67,7 +67,9 @@ comment   = ";" { any character except newline } ;
 Named colors: cyan (default), red, orange, yellow, green, blue, purple, pink, brown, white, gray,
 black.
 
-Climb/dive deliberately avoid the names `up`/`down`, which are easy to confuse with
+The six turns come in symmetric pairs named *axis-word + direction*: `yawleft`/`yawright`,
+`pitchup`/`pitchdown`, `rollleft`/`rollright`. The classic short names are aliases and behave
+identically. There is deliberately no `up`/`down` alias, which is easy to confuse with
 `penup`/`pendown`.
 
 ## Coordinates, units, and orientation
@@ -77,32 +79,43 @@ Climb/dive deliberately avoid the names `up`/`down`, which are easy to confuse w
 - **Units**: distances are world units (the viewport shows the current grid cell size), angles are
   degrees. Any finite number is allowed, including negatives and fractions.
 - **Turtle frame**: the turtle carries an orthonormal right-handed frame of three unit vectors,
-  heading **H**, left wing **L**, and up **U**, with **H × L = U**.
-- **Home pose**: position (0, 0, 0), **H** = +Y, **L** = −X, **U** = +Z. A turtle that never climbs,
-  dives, or rolls stays on the ground and behaves exactly like 2D Logo viewed from above, so
-  `right 90` turns clockwise as seen from above.
+  heading **H** (forward), left wing **L**, and up **U** (out of its back), with **H × L = U**. The
+  right wing is **R = −L**. The playground draws these as labelled arrows on the turtle.
+- **Home pose**: position (0, 0, 0), **H** = +Y, **L** = −X, **U** = +Z. A turtle that never pitches
+  or rolls stays on the ground and behaves exactly like 2D Logo viewed from above, so
+  `right 90` (`yawright 90`) turns clockwise as seen from above.
 
-### Rotation formulas
+### Turns are intrinsic
 
-All rotations are by angle θ and leave the third axis unchanged:
+Every turn rotates the whole frame about one of the turtle's **own current** axes. The axis is
+read from the pose at the moment the command runs, never from the world axes. Positive
+directions follow the right-hand rule about that axis:
 
-| Command | Changes | Formula |
-| --- | --- | --- |
-| `left θ` | H, L | H′ = H cos θ + L sin θ, L′ = L cos θ − H sin θ |
-| `climb θ` | H, U | H′ = H cos θ + U sin θ, U′ = U cos θ − H sin θ |
-| `rollright θ` | L, U | L′ = L cos θ + U sin θ, U′ = U cos θ − L sin θ |
+| Command | Axis (current) | Direction | Frame update for angle θ |
+| --- | --- | --- | --- |
+| `yawleft θ` | **U** | right-hand rule about **U**: **H** → **L** (counter-clockwise seen from above the turtle) | H′ = H cos θ + L sin θ, L′ = L cos θ − H sin θ |
+| `pitchup θ` | **R** = −**L** | right-hand rule about **R**: **H** → **U** (nose up) | H′ = H cos θ + U sin θ, U′ = U cos θ − H sin θ |
+| `rollright θ` | **H** | right-hand rule about **H**: **L** → **U**, **U** → **R** (clockwise seen from behind) | L′ = L cos θ + U sin θ, U′ = U cos θ − L sin θ |
 
-So from home: `left 90` faces −X, `climb 90` faces +Z (with **U** = −Y), and `rollright 90` puts the
-left wing up (**L** = +Z) and the back toward +X (**U** = +X).
+`yawright`, `pitchdown`, and `rollleft` are the same rotations with −θ. The axis of each turn is
+unchanged by it, and position never changes.
+
+From home: `yawleft 90` faces −X, `pitchup 90` faces +Z (with **U** = −Y), and `rollright 90` puts
+the left wing up (**L** = +Z) and the back toward +X (**U** = +X).
 
 ### Composition
 
-Rotations are **intrinsic**: each one turns about the turtle's *current* axes, not the world axes.
-In matrix terms, if R = [H L U] is the orientation, each command updates R ← R · R_local(θ). Order
-therefore matters:
+Because each turn uses the current axes, a turn's effect in world space depends on every earlier
+turn. In matrix terms, with orientation R = [H L U], each command updates R ← R · R_local(θ), so
+turns about different axes do not commute:
 
-- `climb 90 left 90` → nose up, then yaw about the new up axis (−Y): **H** = −X.
-- `left 90 climb 90` → yaw to −X, then pitch about the new left axis: **H** = +Z.
+- `pitchup 90 yawleft 90` → nose up, then yaw about the new **U** (now −Y): **H** = −X.
+- `yawleft 90 pitchup 90` → yaw to −X, then pitch about the new wing axis: **H** = +Z.
+- `rollright 90 pitchup 90` → the roll turns **U** to +X, so pitching "up" heads toward world +X.
+
+On the ground, yaw never changes **U**, so `pitchup` after any number of `yawleft`/`yawright` turns
+still climbs toward world up. That is still a relative turn; it only looks absolute because **U**
+happens to equal +Z. Pitch or roll first and the difference shows.
 
 Multiples of 90° use exact sines and cosines, and the frame is re-orthonormalized after every
 rotation, so squares and cubes close exactly and long programs do not drift.

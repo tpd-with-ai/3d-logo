@@ -1,13 +1,15 @@
 # 3D Logo Playground
 
 A small, teachable 3D version of Logo with an interactive browser playground. Drive a turtle
-through space with yaw, pitch, and roll, and draw either lines or triangle strips.
+through space with six turtle-relative turns (`yawleft`/`yawright`, `pitchup`/`pitchdown`,
+`rollleft`/`rollright`, with classic aliases such as `left`, `right`, `climb`, `dive`) and draw
+either lines or triangle strips.
 
 ```logo
-; A wire cube: a vertical square (climb) on each side of a ground square (right).
+; A wire cube: a vertical square (pitchup) on each side of a ground square (yawright).
 repeat 4 [
-  repeat 4 [ forward 60 climb 90 ]
-  forward 60 right 90
+  repeat 4 [ forward 60 pitchup 90 ]
+  forward 60 yawright 90
 ]
 ```
 
@@ -50,12 +52,13 @@ browser.
 ```
 src/lang/          lexer.ts → parser.ts → ast.ts       source → AST, syntax errors with spans
                    commands.ts                         command table (names, aliases, inputs, help)
-src/turtle/        vec.ts, turtle.ts                   pose and intrinsic yaw/pitch/roll
+src/turtle/        vec.ts, turtle.ts                   pose and intrinsic yaw/pitch/roll (current axes)
 src/geometry/      drawing.ts                          line segments, triangle strips, pending points
 src/interpreter/   interpreter.ts                      runs the AST, repeat/repcount, limits, frames
 src/render/        drawingLayer.ts, turtleModel.ts,    three.js scene; owns and disposes GPU resources
                    viewport.ts
-src/ui/            editor.ts, app.ts, help.ts          CodeMirror editor, controls, playback
+src/ui/            editor.ts, app.ts, help.ts,         CodeMirror editor, controls, playback, Help
+                   diagrams.ts                         Help's turtle/axis SVGs (posed by turtle.ts)
 src/examples.ts                                        example programs
 ```
 
@@ -66,7 +69,8 @@ src/examples.ts                                        example programs
   new ones and shares materials across runs. Unit tests check disposal; a browser test checks that
   the renderer's GPU geometry and texture counts stay flat across repeated runs.
 - **Help stays in sync.** The in-app reference is generated from the same command table the
-  parser uses.
+  parser uses, its turn diagrams are posed with the real turn functions, and its "Try it"
+  snippets are the "Turning basics" examples, which unit tests run.
 
 ## Known limitations
 

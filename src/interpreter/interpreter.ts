@@ -148,16 +148,17 @@ class Interpreter {
         this.pose = HOME_POSE;
         d.moveTo(HOME_POSE.position);
         break;
-      case 'left':
+      // Every turn rotates about one of the turtle's own current axes (never a world axis).
+      case 'yawleft':
         this.pose = yaw(this.pose, number());
         break;
-      case 'right':
+      case 'yawright':
         this.pose = yaw(this.pose, -number());
         break;
-      case 'climb':
+      case 'pitchup':
         this.pose = pitch(this.pose, number());
         break;
-      case 'dive':
+      case 'pitchdown':
         this.pose = pitch(this.pose, -number());
         break;
       case 'rollright':

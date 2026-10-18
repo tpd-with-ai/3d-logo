@@ -29,9 +29,10 @@ function show(expr: Expr): string {
 
 describe('parser', () => {
   it('resolves aliases and case to canonical command names', () => {
-    const program = parse('FD 10 Rt 90\npu PD rr 5 rl 5 bk 1 lt 2');
+    const program = parse('FD 10 Rt 90\npu PD rr 5 rl 5 bk 1 lt 2 left 1 right 1 Climb 3 dive 4 PitchUp 1 yawLeft 1');
     expect(program.body.map((s) => (s as CommandStatement).name)).toEqual([
-      'forward', 'right', 'penup', 'pendown', 'rollright', 'rollleft', 'back', 'left',
+      'forward', 'yawright', 'penup', 'pendown', 'rollright', 'rollleft', 'back', 'yawleft',
+      'yawleft', 'yawright', 'pitchup', 'pitchdown', 'pitchup', 'yawleft',
     ]);
   });
 
@@ -56,7 +57,9 @@ describe('parser', () => {
 
   it.each([
     ['foward 10', "Unknown command 'foward'. Did you mean 'forward'?", 1, 1],
-    ['fd 10\nrt', "'right' needs an angle in degrees, e.g. left 90.", 2, 1],
+    ['fd 10\nrt', "'rt' needs an angle in degrees, e.g. rt 90.", 2, 1],
+    ['pitchup fd 10', "'pitchup' needs an angle in degrees, e.g. pitchup 90.", 1, 1],
+    ['yawlft 90', "Unknown command 'yawlft'. Did you mean 'yawleft'?", 1, 1],
     ['fd 10 20', 'Unexpected number 20.', 1, 7],
     ['repeat 4 fd 10', "'repeat' needs a [ block ] after the count.", 1, 10],
     ['repeat 4 [\n fd 10', "This '[' is never closed. Add a matching ']'.", 1, 10],

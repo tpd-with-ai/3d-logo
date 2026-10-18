@@ -57,6 +57,46 @@ describe('repeat', () => {
   });
 });
 
+describe('relative turns through the language', () => {
+  const pose = (source: string) => {
+    const p = ok(source).pose;
+    return [p.position, p.heading, p.left, p.up].map(r);
+  };
+  // An arbitrary starting orientation, so no command can pass by coincidence with world axes.
+  const TILT = 'yawleft 25 pitchup 40 rollright 65 forward 7 ';
+
+  it.each([
+    ['yawleft 33', 'left 33', 'lt 33', 'yawright -33'],
+    ['yawright 33', 'right 33', 'rt 33', 'yawleft -33'],
+    ['pitchup 33', 'climb 33', 'pitchdown -33', 'dive -33'],
+    ['pitchdown 33', 'dive 33', 'pitchup -33', 'climb -33'],
+    ['rollleft 33', 'rl 33', 'rollright -33', 'rr -33'],
+  ])('%s, its aliases, and its negated opposite agree after a tilt', (...variants) => {
+    const expected = pose(TILT + variants[0]);
+    for (const variant of variants.slice(1)) expect(pose(TILT + variant)).toEqual(expected);
+    expect(expected).not.toEqual(pose(TILT)); // the turn really changed something
+  });
+
+  it.each([
+    ['yawleft', 'yawright'],
+    ['pitchup', 'pitchdown'],
+    ['rollleft', 'rollright'],
+  ])('%s and %s cancel from a tilted frame', (a, b) => {
+    expect(pose(`${TILT} ${a} 48 ${b} 48`)).toEqual(pose(TILT));
+  });
+
+  it.each([
+    ['pitchup 90 forward 10', [0, 0, 10]], // on the ground, U is world up
+    ['yawleft 90 pitchup 90 forward 10', [0, 0, 10]], // yaw leaves U alone, so this still climbs
+    ['pitchup 90 yawleft 90 forward 10', [-10, 0, 0]], // yaw about the new up (−Y)
+    ['rollright 90 pitchup 90 forward 10', [10, 0, 0]], // roll first: "up" is now world +X
+    ['rollleft 90 pitchup 90 forward 10', [-10, 0, 0]],
+    ['pitchup 90 rollright 90 yawright 90 forward 10', [0, 10, 0]], // yaw about the rolled up axis (+X)
+  ])('%s ends at %j', (source, expected) => {
+    expect(r(ok(source).pose.position)).toEqual(expected);
+  });
+});
+
 describe('line mode', () => {
   it('draws one segment per pen-down move in the current color', () => {
     const result = ok('fd 10 color red rt 90 fd 5 bk 5');

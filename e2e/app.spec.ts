@@ -10,8 +10,12 @@ async function setCode(page: Page, code: string) {
 }
 
 /** Counts pixels in the WebGL canvas that match the default cyan pen color. */
-function cyanPixels(page: Page): Promise<number> {
-  return page.evaluate(() => {
+const cyanPixels = (page: Page) => countPixels(page, 'cyan');
+/** Counts pixels matching the amber heading arrow (H) of the turtle's axes. */
+const amberPixels = (page: Page) => countPixels(page, 'amber');
+
+function countPixels(page: Page, kind: 'cyan' | 'amber'): Promise<number> {
+  return page.evaluate((kind) => {
     const source = document.querySelector<HTMLCanvasElement>('#viewport canvas')!;
     const canvas = document.createElement('canvas');
     canvas.width = source.width;
@@ -21,10 +25,11 @@ function cyanPixels(page: Page): Promise<number> {
     const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
     let count = 0;
     for (let i = 0; i < data.length; i += 4) {
-      if (data[i] < 100 && data[i + 1] > 180 && data[i + 2] > 200) count++;
+      const [r, g, b] = [data[i], data[i + 1], data[i + 2]];
+      if (kind === 'cyan' ? r < 100 && g > 180 && b > 200 : r > 220 && g > 150 && g < 215 && b < 90) count++;
     }
     return count;
-  });
+  }, kind);
 }
 
 test.beforeEach(async ({ page }) => {
@@ -96,7 +101,7 @@ test('animated playback can be stopped and stepped', async ({ page }) => {
   await expect(page.locator('#stop')).toBeDisabled();
 
   await page.locator('#step').click();
-  await expect(status(page)).toHaveText('Step 1 of 576: climb 20');
+  await expect(status(page)).toHaveText('Step 1 of 576: pitchup 20');
   await page.locator('#step').click();
   await expect(status(page)).toHaveText('Step 2 of 576: forward 6');
 });
@@ -105,10 +110,45 @@ test('help opens as a dialog and closes with Escape', async ({ page }) => {
   await page.locator('#help-open').click();
   const dialog = page.getByRole('dialog', { name: 'Language reference' });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText('rollright');
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   await expect(page.locator('#help-open')).toBeFocused();
+});
+
+test('help explains the turtle axes and runs the turn mini-examples', async ({ page }) => {
+  await page.locator('#help-open').click();
+  const dialog = page.getByRole('dialog', { name: 'Language reference' });
+  // One axes diagram plus a before/after diagram for each of yaw, pitch, and roll.
+  await expect(dialog.getByRole('img', { name: /heading H pointing forward/ })).toBeVisible();
+  for (const name of [/^Yaw: .*about its up axis U/, /^Pitch: .*wing axis/, /^Roll: .*about its heading H/]) {
+    await expect(dialog.getByRole('img', { name })).toBeVisible();
+  }
+  for (const word of ['yawleft', 'yawright', 'pitchup', 'pitchdown', 'rollleft', 'rollright', 'climb', 'dive']) {
+    await expect(dialog.locator('.turn-cards')).toContainText(word);
+  }
+
+  await dialog.getByRole('button', { name: 'Try the Roll example in the editor' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('#examples')).toHaveValue('turn-roll');
+  await expect(status(page)).toContainText(/Step \d+ of 5/); // replays visibly
+  await expect(status(page)).toContainText('Ran 5 steps', { timeout: 10_000 });
+  // After rollright 90, yawleft (about the new U) sends the turtle up, not sideways.
+  await expect(page.locator('#hud')).toContainText('pos (0, 60, 30)');
+  await expect(page.locator('#hud')).toContainText('U (1, 0, 0)');
+
+  await page.locator('#help-open').click();
+  await dialog.getByRole('button', { name: 'Try the order matters example in the editor' }).click();
+  await expect(status(page)).toContainText('3 lines', { timeout: 10_000 });
+});
+
+test('the turtle shows its own axes, and the Axes toggle hides them', async ({ page }) => {
+  await page.locator('#live').uncheck();
+  await setCode(page, 'forward 10');
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await expect(status(page)).toContainText('1 line');
+  await expect.poll(() => amberPixels(page)).toBeGreaterThan(30);
+  await page.locator('#turtle-axes').uncheck();
+  await expect.poll(() => amberPixels(page)).toBeLessThan(5);
 });
 
 test('re-running does not leak GPU geometries or textures', async ({ page }) => {

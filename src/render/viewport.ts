@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { Bounds } from '../geometry/drawing';
 import type { Pose } from '../turtle/turtle';
 import { DrawingLayer } from './drawingLayer';
+import { labelSprite } from './label';
 import { TurtleModel } from './turtleModel';
 
 /** Default view direction: from the front-right, above the ground, looking toward the target. */
@@ -13,22 +14,6 @@ function niceStep(raw: number): number {
   const power = 10 ** Math.floor(Math.log10(raw));
   const mantissa = raw / power;
   return (mantissa <= 1 ? 1 : mantissa <= 2 ? 2 : mantissa <= 5 ? 5 : 10) * power;
-}
-
-function labelSprite(text: string, color: string): THREE.Sprite {
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 64;
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    ctx.font = 'bold 44px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = color;
-    ctx.fillText(text, 32, 34);
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
 }
 
 /**
@@ -101,6 +86,11 @@ export class Viewport {
   setPose(pose: Pose): void {
     this.pose = pose;
     this.turtle.setPose(pose, this.turtleSize());
+    this.invalidate();
+  }
+
+  setTurtleAxesVisible(visible: boolean): void {
+    this.turtle.setAxesVisible(visible);
     this.invalidate();
   }
 
