@@ -297,6 +297,12 @@ test('help opens as a dialog and closes with Escape', async ({ page }) => {
 });
 
 test('help explains the turtle axes and runs the turn mini-examples', async ({ page }) => {
+  // A paused fake clock drives the replay: in real time it lasts ~125 ms, too short to observe reliably.
+  await page.clock.install();
+  await page.reload();
+  await expect(status(page)).toContainText('Ran');
+  await page.clock.pauseAt(Date.now() + 60_000);
+
   await page.locator('#help-open').click();
   const dialog = page.getByRole('dialog', { name: 'Language reference' });
   // One axes diagram plus a before/after diagram for each of yaw, pitch, and roll.
@@ -311,15 +317,30 @@ test('help explains the turtle axes and runs the turn mini-examples', async ({ p
   await dialog.getByRole('button', { name: 'Try the Roll example in the editor' }).click();
   await expect(dialog).toBeHidden();
   await expect(page.locator('#examples')).toHaveValue('turn-roll');
-  await expect(status(page)).toContainText(/Step \d+ of 5/); // replays visibly
-  await expect(status(page)).toContainText('Ran 5 steps', { timeout: 10_000 });
+  // Replays visibly at Medium speed (25 ms per step). Animation frames are 16 ms apart, so sampling
+  // every 10 ms sees each step; the last step shows the final summary directly. Recording starts at
+  // the first step, since the starter program's summary is still showing until then.
+  const seen: string[] = [];
+  for (let ms = 0; ms < 1000 && !seen.at(-1)?.startsWith('Ran'); ms += 10) {
+    await page.clock.runFor(10);
+    const text = (await status(page).textContent())!;
+    if ((seen.length || text.startsWith('Step')) && text !== seen.at(-1)) seen.push(text);
+  }
+  expect(seen).toEqual([
+    'Step 1 of 5: forward 30',
+    'Step 2 of 5: rollright 90',
+    'Step 3 of 5: forward 30',
+    'Step 4 of 5: yawleft 90',
+    'Ran 5 steps · 3 lines · 0 triangles',
+  ]);
   // After rollright 90, yawleft (about the new U) sends the turtle up, not sideways.
   await expect(page.locator('#hud')).toContainText('pos (0, 60, 30)');
   await expect(page.locator('#hud')).toContainText('U (1, 0, 0)');
 
   await page.locator('#help-open').click();
   await dialog.getByRole('button', { name: 'Try the order matters example in the editor' }).click();
-  await expect(status(page)).toContainText('3 lines', { timeout: 10_000 });
+  await page.clock.runFor(5000);
+  await expect(status(page)).toContainText('3 lines');
 });
 
 test('the turtle shows its own axes, and the Axes toggle hides them', async ({ page }) => {
