@@ -19,6 +19,8 @@ function chromiumPath(): string | undefined {
 }
 
 const PORT = 4174;
+// Same BASE_PATH as vite.config.ts, so CI tests the build under the GitHub Pages subpath.
+const BASE_URL = `http://127.0.0.1:${PORT}${process.env.BASE_PATH || '/'}`;
 
 export default defineConfig({
   testDir: 'e2e',
@@ -26,7 +28,7 @@ export default defineConfig({
   fullyParallel: true,
   reporter: 'list',
   use: {
-    baseURL: `http://127.0.0.1:${PORT}`,
+    baseURL: BASE_URL,
     trace: 'retain-on-failure',
   },
   projects: [
@@ -43,7 +45,7 @@ export default defineConfig({
   ],
   webServer: {
     command: `pnpm build && pnpm exec vite preview --port ${PORT} --strictPort --host 127.0.0.1`,
-    url: `http://127.0.0.1:${PORT}`,
+    url: BASE_URL,
     timeout: 120_000,
     reuseExistingServer: !process.env.CI,
   },

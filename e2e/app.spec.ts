@@ -33,7 +33,7 @@ function countPixels(page: Page, kind: 'cyan' | 'amber'): Promise<number> {
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./'); // relative, so it stays under baseURL's BASE_PATH
   await expect(status(page)).toContainText('Ran');
 });
 
@@ -381,6 +381,8 @@ test.describe('flight is translation, not zoom (deterministic clock)', () => {
     await page.clock.install();
     await page.reload();
     await expect(status(page)).toContainText('Ran');
+    // Pause, so wall-clock time spent between test steps does not leak into app time.
+    await page.clock.pauseAt(Date.now() + 60_000);
     await page.locator('#viewport').focus();
     await page.clock.runFor(2000); // initial damping settles
   });

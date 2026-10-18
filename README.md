@@ -55,6 +55,15 @@ Browser tests use `PLAYWRIGHT_CHROMIUM_PATH` if set, otherwise the Chrome bundle
 agent-browser (present in Amp orbs), otherwise Playwright's own Chromium
 (`pnpm exec playwright install chromium`).
 
+## Deployment
+
+Every push to `main` deploys to GitHub Pages at <https://tpd-with-ai.github.io/3d-logo/> via
+[.github/workflows/pages.yml](.github/workflows/pages.yml): lint, unit tests, production build,
+browser tests against that build, then upload and deploy. The workflow sets `BASE_PATH` to the
+Pages subpath (`/3d-logo/`); without it, `dev`, `build`, and `preview` serve from `/`. To try the
+Pages build locally: `BASE_PATH=/3d-logo/ pnpm build && BASE_PATH=/3d-logo/ pnpm preview`, then
+open `/3d-logo/`.
+
 ## Architecture
 
 Each layer depends only on the ones above it, so language semantics are testable without a
