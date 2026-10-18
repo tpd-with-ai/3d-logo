@@ -8,6 +8,8 @@ export interface Segment {
   readonly a: Vec3;
   readonly b: Vec3;
   readonly color: string;
+  /** Opacity 0–1 (whole percents) captured with the color. 0 is kept in the model but not rendered. */
+  readonly alpha: number;
 }
 
 export interface Triangle {
@@ -18,6 +20,8 @@ export interface Triangle {
   /** Unit face normal by the right-hand rule over a → b → c (for polygons: the polygon's normal). */
   readonly normal: Vec3;
   readonly color: string;
+  /** Opacity 0–1 (whole percents) captured with the color. 0 is kept in the model but not rendered. */
+  readonly alpha: number;
   /**
    * Which edges are outline edges, as bits: 1 = a–b, 2 = b–c, 4 = c–a. Triangles cut from a
    * polygon leave their interior diagonals out so only the polygon's outline is drawn.
@@ -80,6 +84,7 @@ export class DrawingBuilder {
   penDown = true;
   mode: DrawMode = 'lines';
   color = DEFAULT_COLOR;
+  alpha = 1;
 
   private cursor: Vec3;
   private window: Vec3[] = [];
@@ -113,7 +118,7 @@ export class DrawingBuilder {
     if (!this.penDown) return;
 
     if (this.mode === 'lines') {
-      if (!equals(from, to)) this.segments.push({ a: from, b: to, color: this.color });
+      if (!equals(from, to)) this.segments.push({ a: from, b: to, color: this.color, alpha: this.alpha });
       return;
     }
 
@@ -129,7 +134,7 @@ export class DrawingBuilder {
     }
     const [a, b, c] = points;
     const n = cross(sub(b, a), sub(c, a));
-    if (length(n) > 1e-9) this.triangles.push({ a, b, c, normal: normalize(n), color: this.color, edges: 7 });
+    if (length(n) > 1e-9) this.triangles.push({ a, b, c, normal: normalize(n), color: this.color, alpha: this.alpha, edges: 7 });
   }
 
   private tetrahedron([a, b, c, d]: Vec3[]): void {
@@ -150,7 +155,7 @@ export class DrawingBuilder {
         [q, r] = [r, q];
         n = scale(n, -1);
       }
-      this.triangles.push({ a: p, b: q, c: r, normal: normalize(n), color: this.color, edges: 7 });
+      this.triangles.push({ a: p, b: q, c: r, normal: normalize(n), color: this.color, alpha: this.alpha, edges: 7 });
     }
   }
 
@@ -170,7 +175,7 @@ export class DrawingBuilder {
     for (const [i, j, k] of face.triangles) {
       const [a, b, c] = [face.corners[i], face.corners[j], face.corners[k]];
       const edges = outline(i, j) | (outline(j, k) << 1) | (outline(k, i) << 2);
-      this.triangles.push({ a, b, c, normal: face.normal, color: this.color, edges });
+      this.triangles.push({ a, b, c, normal: face.normal, color: this.color, alpha: this.alpha, edges });
     }
     return undefined;
   }
@@ -186,8 +191,9 @@ export class DrawingBuilder {
     this.restartStrip();
   }
 
-  setColor(hex: string): void {
+  setColor(hex: string, alpha = 1): void {
     this.color = hex;
+    this.alpha = alpha;
   }
 
   clear(): void {
@@ -203,6 +209,7 @@ export class DrawingBuilder {
     this.penDown = true;
     this.mode = 'lines';
     this.color = DEFAULT_COLOR;
+    this.alpha = 1;
     this.clear();
   }
 

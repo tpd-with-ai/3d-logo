@@ -31,16 +31,18 @@ export function thumbnail(drawing: Drawing, size = 132): string {
   const items: { depth: number; svg: (map: (p: Vec3) => string) => string }[] = [];
   const pts: (readonly [number, number, number])[] = [];
   for (const s of drawing.segments) {
+    if (s.alpha === 0) continue;
     const [a, b] = [project(s.a), project(s.b)];
     pts.push(a, b);
-    items.push({ depth: Math.max(a[2], b[2]) + 1e-3, svg: (m) => `<path d="M${m(s.a)}L${m(s.b)}" stroke="${s.color}"/>` });
+    items.push({ depth: Math.max(a[2], b[2]) + 1e-3, svg: (m) => `<path d="M${m(s.a)}L${m(s.b)}" stroke="${s.color}" stroke-opacity="${s.alpha}"/>` });
   }
   for (const t of drawing.triangles) {
+    if (t.alpha === 0) continue;
     const corners = [t.a, t.b, t.c].map(project);
     pts.push(...corners);
     // Double-sided: light whichever side faces the viewer.
     const facing = Math.abs(dot(t.normal, VIEW));
-    const opacity = (0.45 + 0.55 * facing).toFixed(2);
+    const opacity = ((0.45 + 0.55 * facing) * t.alpha).toFixed(2);
     items.push({
       depth: (corners[0][2] + corners[1][2] + corners[2][2]) / 3,
       svg: (m) => `<path d="M${m(t.a)}L${m(t.b)}L${m(t.c)}Z" fill="${t.color}" fill-opacity="${opacity}" stroke="#0b1020" stroke-opacity="0.35"/>`,

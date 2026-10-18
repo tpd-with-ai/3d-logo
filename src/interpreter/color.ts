@@ -9,6 +9,10 @@
  *   A saturation or value strictly between 0 and 1 (e.g. hsv(0, 50, 0.5)) is rejected as probable
  *   0–1 notation instead of silently drawing an almost-black color, so the accepted values are
  *   0 and anything from 1 to 100 (fractions such as 12.5 are fine).
+ * rgba(r, g, b, a) / hsva(h, s, v, a): the same, plus alpha (opacity) as a percentage 0–100,
+ *   where 0 is invisible and 100 is opaque. Alpha rounds to the nearest whole percent (half up),
+ *   like rgb channels round to whole numbers, and follows the same 0–1 guard as saturation.
+ *   rgb(), hsv(), names, and hex colors are fully opaque (100).
  */
 
 /** A problem with one component (0-based index), reported at that component's source span. */
@@ -79,4 +83,20 @@ export function hsvToHex(h: number, s: number, v: number): string {
     sector < 5 ? [x, 0, chroma] :
     [chroma, 0, x];
   return toHex([r, g, b].map((c) => (c + m) * 255));
+}
+
+/**
+ * Validates an rgba/hsva alpha (component index 3) given in percent and returns the canonical
+ * opacity: a whole percent 0–100.
+ */
+export function alphaPercent(a: number, fn: 'rgba' | 'hsva', shown: number[]): number {
+  if (!Number.isFinite(a)) throw new ColorComponentError(3, `${fn} alpha must be a finite number.`);
+  if (a < 0 || a > 100) {
+    throw new ColorComponentError(3, `${fn} alpha is a percentage between 0 (invisible) and 100 (opaque), but got ${show(a)}.`);
+  }
+  if (a > 0 && a < 1) {
+    const fixed = [...shown.map(show), show(a * 100)].join(', ');
+    throw new ColorComponentError(3, `${fn} alpha is a percentage (0–100), not 0–1. Did you mean ${fn}(${fixed})?`);
+  }
+  return Math.round(a);
 }

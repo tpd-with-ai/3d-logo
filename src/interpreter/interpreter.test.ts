@@ -300,6 +300,45 @@ describe('functional colors', () => {
     expect(result.drawing.triangles.map((t) => t.color)).toEqual(['#ff0000']);
   });
 
+  it('captures alpha with the color in every mode; rgb, hsv, names, hex, and reset are opaque', () => {
+    const result = ok(
+      'color rgba(255, 0, 0, 40) fd 10 color hsva(120, 100, 100, 12.5) fd 10 color rgb(0, 0, 255) fd 10 ' +
+        'color rgba(0, 0, 0, 0) fd 10 color red fd 10 ' +
+        'triangles color hsva(0, 100, 100, 50) fd 10 rt 120 fd 10 color rgba(0, 0, 255, 25) rt 120 fd 10 ' +
+        'polygon [ color #00ff00 fd 10 color rgba(0, 255, 0, 75) rt 90 fd 10 rt 90 fd 10 ] ' +
+        'pu home pd tetrahedra color hsva(240, 100, 100, 60) setpos 40 40 0 setpos 40 0 40 setpos 0 40 40',
+    );
+    const { segments, triangles } = result.drawing;
+    expect(segments.map((s) => [s.color, s.alpha])).toEqual([
+      ['#ff0000', 0.4],
+      ['#00ff00', 0.13], // 12.5 % rounds to 13 %
+      ['#0000ff', 1],
+      ['#000000', 0], // alpha 0: kept in the model (counted, framed), just not rendered
+      ['#ef4444', 1], // named red
+    ]);
+    expect(triangles.map((t) => t.alpha)).toEqual([0.5, 0.25, 0.75, 0.75, 0.6, 0.6, 0.6, 0.6]);
+    expect(result.alpha).toBe(0.6);
+    expect(ok('color rgba(1, 2, 3, 10) reset').alpha).toBe(1);
+    expect(ok('color hsva(0, 100, 100, 10) color #123').alpha).toBe(1);
+  });
+
+  it('evaluates alpha each time, so gradients work with repcount', () => {
+    const { segments } = ok('repeat 4 [ color hsva(0, 100, 100, repcount * 25) fd 10 ]').drawing;
+    expect(segments.map((s) => s.alpha)).toEqual([0.25, 0.5, 0.75, 1]);
+  });
+
+  it.each([
+    ['color rgba(255, 0, 0, 120)', 'rgba alpha is a percentage between 0 (invisible) and 100 (opaque), but got 120.', 1, 23],
+    ['color hsva(0, 100, 100, 0.5)', 'Did you mean hsva(0, 100, 100, 50)?', 1, 25],
+    ['repeat 2 [ color rgba(0, 0, 0, repcount * -10) ]', 'but got -10.', 1, 32],
+    ['color rgba(300, 0, 0, 50)', 'rgb red must be between 0 and 255, but got 300.', 1, 12],
+  ])('reports alpha errors at the component: %j', (source, message, line, column) => {
+    const result = runSource(source);
+    expect(result.error?.kind).toBe('runtime');
+    expect(result.error?.message).toContain(message);
+    expect(result.error?.span).toMatchObject({ line, column });
+  });
+
   it.each([
     ['color rgb(255, 300, 0)', 'rgb green must be between 0 and 255, but got 300.', 1, 16],
     ['repeat 3 [ color rgb(repcount * 100, 0, 0) ]', 'rgb red must be between 0 and 255, but got 300.', 1, 22],

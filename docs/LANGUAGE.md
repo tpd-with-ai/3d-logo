@@ -29,7 +29,9 @@ command   = NAME                      (* commands with no input *)
           | "color" color ;
 color     = COLORNAME | HEX
           | "rgb" "(" expr "," expr "," expr ")"
-          | "hsv" "(" expr "," expr "," expr ")" ;
+          | "hsv" "(" expr "," expr "," expr ")"
+          | "rgba" "(" expr "," expr "," expr "," expr ")"
+          | "hsva" "(" expr "," expr "," expr "," expr ")" ;
 
 expr      = term { ( "+" | "-" ) term } ;
 term      = unary { ( "*" | "/" ) unary } ;
@@ -52,8 +54,8 @@ comment   = ";" { any character except newline } ;
   is a sign and starts a new input, so `setpos 10 -5 0` has three inputs. Inside parentheses it
   subtracts again. `10 - 5`, `10-5`, and `(10 -5)` all subtract; `fd 10 -5` is a syntax error
   ("Unexpected number -5") rather than a silent `fd 5`.
-- `rgb`, `hsv`, `sin`, and `cos` need parentheses; `rgb` and `hsv` take exactly three
-  comma-separated inputs. Words are case-insensitive: `COLOR HSV(0, 100, 100)` is fine.
+- `rgb`, `hsv`, `rgba`, `hsva`, `sin`, and `cos` need parentheses; `rgb` and `hsv` take exactly
+  three comma-separated inputs, `rgba` and `hsva` exactly four. Words are case-insensitive: `COLOR HSV(0, 100, 100)` is fine.
 - `repcount` may only appear inside a `repeat` block; using it elsewhere is a syntax error.
 
 ## Commands
@@ -76,7 +78,7 @@ comment   = ";" { any character except newline } ;
 | `triangles` | | | Switch to triangle mode and start a new strip here. |
 | `tetrahedra` | | | Switch to tetrahedra mode and start a new four-point window here. |
 | `polygon [ … ]` | | block | Fill one flat face whose corners are the start position and the end of each move in the block. |
-| `color c` | | color | Set the pen color: a name below, `#rrggbb` / `#rgb`, `rgb(r, g, b)`, or `hsv(h, s, v)`. |
+| `color c` | | color | Set the pen color: a name below, `#rrggbb` / `#rgb`, `rgb(r, g, b)`, `hsv(h, s, v)`, `rgba(r, g, b, a)`, or `hsva(h, s, v, a)`. |
 | `clear` | | | Erase the drawing. Pose, pen, mode, and color are unchanged. |
 | `reset` | | | Erase the drawing and restore every start setting (home pose without drawing, pen down, line mode, cyan). |
 | `repeat n [ … ]` | | count | Run the block `n` times. `n` must be a whole number ≥ 0. |
@@ -88,7 +90,8 @@ black.
 
 ### Functional colors
 
-Every color is normalized to one canonical form, lowercase `#rrggbb`, when `color` runs. The
+Every color is normalized to one canonical form, lowercase `#rrggbb` plus an opacity (alpha) in
+whole percents, when `color` runs. The
 components of `rgb()` and `hsv()` are expressions evaluated at that moment (so they may use
 arithmetic and `repcount`); values are validated, never clamped, and errors point at the offending
 component.
@@ -98,10 +101,27 @@ component.
 | `rgb(r, g, b)` | each channel 0–255 | Fractions round to the nearest integer (half up): `rgb(127.5, 0, 0)` = `#800000`. |
 | `hsv(h, s, v)` | hue: any finite number of degrees, wrapped into [0, 360); saturation, value: percent 0–100 | Standard HSV→RGB, then scaled to 0–255 and rounded like `rgb`. `hsv(0, 100, 100)` = `#ff0000`, `hsv(120, 100, 100)` = `#00ff00`, `hsv(-120, 100, 100)` = `hsv(240, 100, 100)` = `#0000ff`, `hsv(0, 0, 50)` = `#808080`. |
 
-To catch 0–1 notation, a saturation or value strictly between 0 and 1 is an error with a
-suggestion (`hsv(0, 0.5, 1)` → "Did you mean hsv(0, 50, 100)?"); 0 and anything from 1 to 100 are
-accepted. Non-finite components (for example from overflow) are errors too. Lines and triangles
-keep the color that was current when they were made, as named colors always have.
+| `rgba(r, g, b, a)`, `hsva(h, s, v, a)` | as above, plus alpha: percent 0–100 | Alpha rounds to the nearest whole percent (half up): `rgba(255, 0, 0, 37.5)` is red at 38 %. 0 is invisible, 100 opaque. |
+
+Names, hex, `rgb()`, and `hsv()` are fully opaque (alpha 100), and so is `reset`. To catch 0–1
+notation, a saturation, value, or alpha strictly between 0 and 1 is an error with a suggestion
+(`hsv(0, 0.5, 1)` → "Did you mean hsv(0, 50, 100)?", `rgba(255, 0, 0, 0.5)` → "Did you mean
+rgba(255, 0, 0, 50)?"); 0 and anything from 1 to 100 are accepted. Non-finite components (for example from overflow) are errors too. Lines, triangles, polygon
+faces, and tetrahedra keep the color *and alpha* that were current when they were made (a polygon
+at its closing `]`, a triangle or tetrahedron at its last point).
+
+### Transparency
+
+- **Alpha 0** geometry is kept: it is counted, framed by Fit, and takes part in triangle and
+  tetrahedron windows exactly like visible geometry, so changing only alpha never changes the
+  shape. It is simply not drawn. The status line reports it ("2 invisible (alpha 0)").
+- **Rendering.** Opaque geometry (alpha 100) keeps the normal opaque path. Translucent faces are
+  drawn after it, without writing depth, in two passes (all back faces, then all front faces), so
+  a translucent solid shows its far side through its near side and opaque things inside stay
+  visible. Translucent lines are grouped by alpha percent.
+- **Limitation.** Translucent faces are sorted per batch, not per triangle, so where several
+  translucent shapes overlap, the blend order can be slightly wrong from some viewing angles. This
+  is the usual trade-off of real-time transparency.
 
 The six turns come in symmetric pairs named *axis-word + direction*: `yawleft`/`yawright`,
 `pitchup`/`pitchdown`, `rollleft`/`rollright`. The classic short names are aliases and behave
@@ -277,6 +297,13 @@ The playground's **Gallery** groups the examples by category and labels each one
 - **Approximation**: a polygonal approximation of a smooth curve or surface (helix, trefoil,
   torus, Möbius strip, helicoid, geodesic sphere with coordinates rounded to 0.001).
 - **Artistic** and **Lesson**: designs, and small programs that teach one idea.
+
+The **Tetrahedra** category shows the solid mode: a Boerdijk–Coxeter chain, a lesson on flat
+(skipped) windows, a crystal slab of 15 regular tetrahedra, a level-3 Sierpiński tetrahedron (64
+solids with exact integer corners), a starburst, a closed twisted tunnel, a coral of tapering
+chains, and nested translucent shells. Examples made of separate solids put `penup` / `pendown`
+between them so no window bridges two solids by accident; the chain, tunnel, and coral branches
+slide on purpose.
 
 Unit tests run every example, snapshot its counts and bounding box, and check exact models
 independently (icosahedron edges, cube edges, Hilbert lattice coverage, regular tetrahedra, and

@@ -20,11 +20,12 @@ describe('examples', () => {
     for (const e of EXAMPLES) expect(e.description.length, e.id).toBeGreaterThan(10);
   });
 
-  it.each(EXAMPLES.map((e) => [e.id, e.code]))('%s runs without errors, draws, and stays in a framable box', (_id, code) => {
+  it.each(EXAMPLES.map((e) => [e.id, e.code]))('%s runs without errors, draws, and stays in a framable box', (id, code) => {
     const result = runSource(code);
     expect(result.error).toBeUndefined();
     expect(result.drawing.segments.length + result.drawing.triangles.length).toBeGreaterThan(0);
-    expect(result.drawing.skippedTetrahedra).toBe(0);
+    // Only the lesson about flat windows skips one, on purpose.
+    expect(result.drawing.skippedTetrahedra).toBe(id === 'tetra-flat' ? 1 : 0);
     expect(result.steps).toBeLessThan(10_000); // keeps every example instant
     const bounds = drawingBounds(result.drawing)!;
     for (const n of [bounds.min.x, bounds.min.y, bounds.min.z, bounds.max.x, bounds.max.y, bounds.max.z]) {
@@ -178,3 +179,87 @@ describe('exact polyhedra', () => {
     }
   });
 });
+
+describe('tetrahedra gallery', () => {
+  /** Splits a tetrahedra-mode drawing into solids (4 consecutive faces) with their 4 corners and volume. */
+  const solids = (id: string) => {
+    const { drawing, error } = example(id);
+    expect(error).toBeUndefined();
+    expect(drawing.triangles.length).toBe(drawing.tetrahedra * 4); // only solids, no stray triangles
+    const out: { corners: Vec3[]; volume: number; alpha: number }[] = [];
+    for (let i = 0; i < drawing.triangles.length; i += 4) {
+      const faces = drawing.triangles.slice(i, i + 4);
+      const corners: Vec3[] = [];
+      for (const p of faces.flatMap((t) => [t.a, t.b, t.c])) if (!corners.some((q) => key(q) === key(p))) corners.push(p);
+      expect(corners).toHaveLength(4);
+      const [a, b, c, d] = corners;
+      const volume = Math.abs(dot(sub(b, a), cross(sub(c, a), sub(d, a)))) / 6;
+      out.push({ corners, volume, alpha: faces[0].alpha });
+    }
+    return out;
+  };
+
+  it.each([
+    ['tetra-chain', 29],
+    ['tetra-flat', 1],
+    ['tetra-crystal', 15],
+    ['tetra-sierpinski', 64],
+    ['tetra-starburst', 30],
+    ['tetra-tunnel', 96],
+    ['tetra-coral', 95],
+    ['glass-tetra', 4],
+  ] as const)('%s draws %i solids, all with real volume', (id, count) => {
+    const list = solids(id);
+    expect(list).toHaveLength(count);
+    const largest = Math.max(...list.map((s) => s.volume));
+    for (const s of list) expect(s.volume).toBeGreaterThan(1e-3 * largest);
+  });
+
+  it('the flat-window lesson skips exactly the coplanar window and outlines it', () => {
+    const { drawing } = example('tetra-flat');
+    expect(drawing.skippedTetrahedra).toBe(1);
+    expect(drawing.segments).toHaveLength(4);
+    expect(drawing.segments.every((s) => s.a.z === 0 && s.b.z === 0)).toBe(true);
+  });
+
+  it('the crystal slab is 15 regular tetrahedra of edge 40 standing on the ground', () => {
+    const regular = (40 ** 3) / (6 * Math.SQRT2);
+    for (const s of solids('tetra-crystal')) {
+      expect(s.volume).toBeCloseTo(regular, 3);
+      const heights = s.corners.map((p) => p.z).sort((x, y) => x - y);
+      expect(heights.slice(0, 3).every((z) => Math.abs(z) < 1e-9)).toBe(true);
+      expect(heights[3]).toBeCloseTo(40 * Math.sqrt(2 / 3), 5);
+    }
+  });
+
+  it('the Sierpiński tetrahedron has 64 exact integer solids holding 1/8 of the starting volume', () => {
+    const list = solids('tetra-sierpinski');
+    for (const s of list) for (const p of s.corners) for (const n of [p.x, p.y, p.z]) expect(n % 20).toBe(0);
+    const total = list.reduce((sum, s) => sum + s.volume, 0);
+    expect(total).toBeCloseTo(160 ** 3 / 3 / 8, 6);
+    // No two solids share more than one corner: no bridging tetrahedra between neighbours.
+    for (let i = 0; i < list.length; i++)
+      for (let j = i + 1; j < list.length; j++) {
+        const shared = list[i].corners.filter((p) => list[j].corners.some((q) => key(p) === key(q)));
+        expect(shared.length).toBeLessThanOrEqual(1);
+      }
+  });
+
+  it('every starburst spike starts at the centre and the tunnel closes on itself', () => {
+    for (const s of solids('tetra-starburst')) expect(s.corners.some((p) => key(p) === '0,0,0')).toBe(true);
+    const tunnel = solids('tetra-tunnel');
+    expect(new Set(tunnel.flatMap((s) => s.corners.map(key))).size).toBe(96); // the last solids reuse the first points
+  });
+
+  it('nested glass shells are concentric, with alpha falling outward', () => {
+    const list = solids('glass-tetra');
+    expect(list.map((s) => s.alpha)).toEqual([1, 0.45, 0.28, 0.18]);
+    for (const s of list) {
+      const c = s.corners.reduce((acc, p) => add(acc, p), vec(0, 0, 0));
+      expect(length(c)).toBeLessThan(1e-9);
+    }
+    const volumes = list.map((s) => s.volume);
+    expect([...volumes].sort((x, y) => x - y)).toEqual(volumes);
+  });
+});
+

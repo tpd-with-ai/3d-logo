@@ -30,6 +30,16 @@ export interface ViewBasis {
   up: Vec3;
 }
 
+/**
+ * The physical key code of a keyboard event. Some synthetic or remote-desktop events leave
+ * `code` empty; for those, the code is derived from `key` (letters and Shift only).
+ */
+export function keyCode(event: { code: string; key: string }): string {
+  if (event.code) return event.code;
+  if (event.key === 'Shift') return 'ShiftLeft';
+  return /^[a-z]$/i.test(event.key) ? `Key${event.key.toUpperCase()}` : '';
+}
+
 export class FlyKeys {
   private readonly held = new Set<string>();
 

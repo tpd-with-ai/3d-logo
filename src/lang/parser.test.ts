@@ -70,7 +70,7 @@ describe('parser', () => {
     ['fd 1 +', "Expected a number, 'repcount', sin(…), cos(…), or '(' but found the end of the program.", 1, 6],
     ['fd repcount', "'repcount' can only be used inside a repeat block.", 1, 4],
     ['color reed', "Unknown color 'reed'. Did you mean 'red'?", 1, 7],
-    ['color fd 10', "'color' needs a color: a name (red), hex (#ff8800), rgb(255, 128, 0), or hsv(30, 100, 100).", 1, 1],
+    ['color fd 10', "'color' needs a color: a name (red), hex (#ff8800), rgb(255, 128, 0), hsv(30, 100, 100), or with alpha rgba(255, 128, 0, 50) / hsva(30, 100, 100, 50).", 1, 1],
     ['color #12', 'A hex color looks like #ff8800', 1, 7],
     ['fd 10x', "A number must be followed by a space, not 'x'.", 1, 6],
     ['fd 10 @', "Unexpected character '@'.", 1, 7],
@@ -103,7 +103,20 @@ describe('parser', () => {
     expect(rgbArgs).toEqual(['255', '0', '(255 - 5)']);
   });
 
+  it('parses rgba/hsva with four components, arithmetic, spaces, and any case', () => {
+    const program = parse('repeat 2 [ color HSVA( repcount * 20 , 80,100, 100 - repcount * 10 ) color Rgba(255,0, 0,50) ]');
+    const [hsva, rgba] = (program.body[0] as RepeatStatement).body as CommandStatement[];
+    expect(hsva.args[0]).toMatchObject({ kind: 'color', form: 'hsva' });
+    expect((hsva.args[0] as { args: Expr[] }).args.map(show)).toEqual(['(repcount * 20)', '80', '100', '(100 - (repcount * 10))']);
+    expect((rgba.args[0] as { args: Expr[] }).args.map(show)).toEqual(['255', '0', '0', '50']);
+  });
+
   it.each([
+    ['color rgba(1, 2, 3)', "'rgba' takes 4 values but got 3, e.g. rgba(255, 128, 0, 50).", 1, 7],
+    ['color hsva(1, 2, 3, 4, 5)', "'hsva' takes 4 values but got 5, e.g. hsva(30, 100, 100, 50).", 1, 7],
+    ['color rgba(1, 2, 3 4)', "Separate the values of 'rgba' with commas", 1, 20],
+    ['color rgba 1 2 3 4', "'rgba' needs parentheses, e.g. rgba(255, 128, 0, 50).", 1, 7],
+    ['color hsvaa(1, 2, 3, 4)', "Did you mean 'hsva'?", 1, 7],
     ['setpos 1 2', "'setpos' needs three numbers x y z, e.g. setpos 0 -50 20 (it got 2).", 1, 1],
     ['polygon fd 10', "'polygon' needs a [ block ], e.g. polygon [ repeat 4 [ forward 50 right 90 ] ].", 1, 9],
     ['polygon [ fd 10 polygon [ fd 5 ] ]', "'polygon' cannot be used inside a polygon block.", 1, 17],

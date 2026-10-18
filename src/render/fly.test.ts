@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FlyKeys, MAX_STEP_SECONDS, type ViewBasis } from './fly';
+import { FlyKeys, keyCode, MAX_STEP_SECONDS, type ViewBasis } from './fly';
 import { normalize, vec, type Vec3 } from '../turtle/vec';
 
 const close = (actual: Vec3, expected: Vec3) => {
@@ -96,5 +96,13 @@ describe('FlyKeys', () => {
     close(keys.displacement(LEVEL, 0.1, 100), vec(0, 0, 0));
     keys.press('KeyW'); // Shift was cleared too
     close(keys.displacement(LEVEL, 0.1, 100), vec(0, 10, 0));
+  });
+
+  it('reads the physical code, falling back to the key when an event has no code', () => {
+    expect(keyCode({ code: 'KeyW', key: 'z' })).toBe('KeyW'); // AZERTY: position wins
+    expect(keyCode({ code: '', key: 'w' })).toBe('KeyW');
+    expect(keyCode({ code: '', key: 'W' })).toBe('KeyW');
+    expect(keyCode({ code: '', key: 'Shift' })).toBe('ShiftLeft');
+    expect(keyCode({ code: '', key: 'ArrowUp' })).toBe('');
   });
 });

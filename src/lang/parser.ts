@@ -171,25 +171,28 @@ class Parser {
       return { kind: 'color', form: 'hex', hex, span: token.span };
     }
     const name = token.type === 'word' ? token.text.toLowerCase() : '';
-    if (name === 'rgb' || name === 'hsv') {
+    if (name === 'rgb' || name === 'hsv' || name === 'rgba' || name === 'hsva') {
       this.next();
-      const example = name === 'rgb' ? 'rgb(255, 128, 0)' : 'hsv(30, 100, 100)';
-      const { args, close } = this.callArgs(token, 3, example);
-      return { kind: 'color', form: name, args: args as [Expr, Expr, Expr], span: cover(token.span, close.span) };
+      const examples = { rgb: 'rgb(255, 128, 0)', hsv: 'hsv(30, 100, 100)', rgba: 'rgba(255, 128, 0, 50)', hsva: 'hsva(30, 100, 100, 50)' };
+      const { args, close } = this.callArgs(token, name.length === 4 ? 4 : 3, examples[name]);
+      const span = cover(token.span, close.span);
+      return name === 'rgba' || name === 'hsva'
+        ? { kind: 'color', form: name, args: args as [Expr, Expr, Expr, Expr], span }
+        : { kind: 'color', form: name, args: args as [Expr, Expr, Expr], span };
     }
     if (token.type === 'word' && !findCommand(name) && name !== 'repeat') {
       this.next();
       const hex = NAMED_COLORS[name];
       if (!hex) {
-        const hint = suggest(name, [...Object.keys(NAMED_COLORS), 'rgb', 'hsv']);
+        const hint = suggest(name, [...Object.keys(NAMED_COLORS), 'rgb', 'hsv', 'rgba', 'hsva']);
         this.fail(
-          `Unknown color '${token.text}'.${hint ? ` Did you mean '${hint}'?` : ''} Use a name like red, #ff8800, rgb(255, 128, 0), or hsv(30, 100, 100).`,
+          `Unknown color '${token.text}'.${hint ? ` Did you mean '${hint}'?` : ''} Use a name like red, #ff8800, rgb(255, 128, 0), hsv(30, 100, 100), rgba(255, 128, 0, 50), or hsva(30, 100, 100, 50).`,
           token.span,
         );
       }
       return { kind: 'color', form: 'hex', hex, span: token.span };
     }
-    this.fail("'color' needs a color: a name (red), hex (#ff8800), rgb(255, 128, 0), or hsv(30, 100, 100).", command.span);
+    this.fail("'color' needs a color: a name (red), hex (#ff8800), rgb(255, 128, 0), hsv(30, 100, 100), or with alpha rgba(255, 128, 0, 50) / hsva(30, 100, 100, 50).", command.span);
   }
 
   private startsExpression(token: Token): boolean {

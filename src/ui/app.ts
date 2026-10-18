@@ -293,6 +293,11 @@ export class App {
     if (drawing.tetrahedra) parts.push(`${plural(drawing.tetrahedra, 'tetrahedron').replace(/ons$/, 'a')}`);
     if (drawing.skippedTetrahedra) parts.push(`${plural(drawing.skippedTetrahedra, 'flat window')} skipped`);
     if (drawing.pendingPoints.length) parts.push(plural(drawing.pendingPoints.length, 'pending point'));
+    const alphas = [...drawing.segments, ...drawing.triangles].map((p) => p.alpha);
+    const translucent = alphas.filter((a) => a > 0 && a < 1).length;
+    const invisible = alphas.filter((a) => a === 0).length;
+    if (translucent) parts.push(`${translucent.toLocaleString('en-US')} translucent`);
+    if (invisible) parts.push(`${invisible.toLocaleString('en-US')} invisible (alpha 0)`);
     const timing = elapsed === undefined ? '' : ` in ${elapsed < 1 ? '<1' : Math.round(elapsed)} ms`;
     const prefix = result.error ? 'Stopped by an error after' : 'Ran';
     this.setStatus(`${prefix} ${plural(result.steps, 'step')}${timing} · ${parts.join(' · ')}`);
@@ -316,11 +321,12 @@ export class App {
     const result = this.result;
     const pen = result ? (result.penDown ? 'down' : 'up') : 'down';
     const color = result?.color ?? '';
+    const alpha = result && result.alpha < 1 ? ` · alpha ${Math.round(result.alpha * 100)}%` : '';
     this.ui.hud.innerHTML = `
       <div><span class="hud-key">pos</span> ${fmtVec(pose.position)}</div>
       <div><span class="hud-key ax-h">H</span> ${fmtVec(pose.heading)}</div>
       <div><span class="hud-key ax-l">L</span> ${fmtVec(pose.left)} <span class="hud-key ax-u">U</span> ${fmtVec(pose.up)}</div>
-      ${result && !this.playback ? `<div><span class="hud-key">pen</span> ${pen} · ${result.mode} · <span class="hud-swatch" style="background:${color}"></span>${color}</div>` : ''}
+      ${result && !this.playback ? `<div><span class="hud-key">pen</span> ${pen} · ${result.mode} · <span class="hud-swatch" style="background:${color};opacity:${result.alpha}"></span>${color}${alpha}</div>` : ''}
       <div class="hud-dim">grid cell ${fmt(this.viewport.gridStep)} units</div>`;
   }
 

@@ -142,3 +142,36 @@ export function hilbertCode(order = 2, step = 12): string {
     ...lines,
   ].join('\n') + '\n';
 }
+
+/**
+ * Sierpiński tetrahedron: each level replaces a tetrahedron by four half-size copies at its
+ * corners. Starting from the cube-corner tetrahedron (0,0,0), (s,s,0), (s,0,s), (0,s,s), every
+ * corner at level `level` is a multiple of s / 2^level, so with s = 160 the coordinates are exact
+ * integers. Each solid is drawn as its own four-point window (penup, then pendown at a corner).
+ */
+export function sierpinskiCode(level = 3, size = 160): string {
+  const solids: { corners: P[]; path: number[] }[] = [];
+  const split = (corners: P[], path: number[]) => {
+    if (path.length === level) return void solids.push({ corners, path });
+    corners.forEach((corner, i) => {
+      const half = corners.map((c) => corner.map((n, k) => (n + c[k]) / 2) as P);
+      split(half, [...path, i]);
+    });
+  };
+  split([[0, 0, 0], [size, size, 0], [size, 0, size], [0, size, size]], []);
+  const lines: string[] = [];
+  solids.forEach(({ corners, path }, i) => {
+    // One hue per top-level corner, a lighter shade per second-level corner.
+    if (i % 4 ** (level - 2) === 0) lines.push(`color hsv(${200 + path[0] * 45}, ${80 - path[1] * 15}, 100)`);
+    const [a, ...rest] = corners.map((c) => `setpos ${c.join(' ')}`);
+    lines.push(`penup ${a} pendown ${rest.join(' ')}`);
+  });
+  return [
+    `; Sierpinski tetrahedron, level ${level}: ${4 ** level} solids. Each level keeps the four`,
+    '; corner copies of a tetrahedron at half size. All corners are exact integers.',
+    '; penup + pendown before each solid starts a fresh four-point window, so',
+    '; neighbouring solids never get bridged by an extra tetrahedron.',
+    'tetrahedra',
+    ...lines,
+  ].join('\n') + '\n';
+}

@@ -1,7 +1,7 @@
-import { geodesicCode, hilbertCode, icosahedronCode, octahedronCode } from './gallery/generators';
+import { geodesicCode, hilbertCode, icosahedronCode, octahedronCode, sierpinskiCode } from './gallery/generators';
 import { MIZHAEV_SOURCE, mizhaevCode } from './gallery/mizhaev';
 
-export type Category = 'Turning basics' | 'Drawing modes' | 'Classic Logo' | 'Color' | 'Polyhedra' | 'Curves & knots' | 'Surfaces';
+export type Category = 'Turning basics' | 'Drawing modes' | 'Tetrahedra' | 'Classic Logo' | 'Color' | 'Polyhedra' | 'Curves & knots' | 'Surfaces';
 
 /**
  * How faithful an example is to the thing it is named after:
@@ -145,7 +145,7 @@ setpos 0 40 40
   {
     id: 'tetra-chain',
     title: 'Tetrahedron chain (Boerdijk–Coxeter helix)',
-    category: 'Drawing modes',
+    category: 'Tetrahedra',
     accuracy: 'exact',
     description: 'A sliding window of four points stacks regular tetrahedra into a helix.',
     code: `; In tetrahedra mode every 4 consecutive points make a solid. This
@@ -160,6 +160,140 @@ repeat 15 [
   color hsv(repcount * 24 + 12, 70, 100)
   rollright 109.4712206 yawleft 120 forward 40
 ]
+`,
+  },
+  {
+    id: 'tetra-flat',
+    title: 'Solid or flat? (skipped windows)',
+    category: 'Tetrahedra',
+    accuracy: 'lesson',
+    description: 'Four points make a solid only if they are not in one plane; a flat window is skipped.',
+    code: `; Four points make a tetrahedron only if they are NOT in one plane.
+tetrahedra
+color rgb(80, 200, 120)
+setpos 40 0 0  setpos 20 35 0  setpos 20 12 33   ; 4th point lifted: a solid
+penup setpos 70 0 0 pendown                      ; fresh window at x = 70
+color rgb(240, 90, 90)
+setpos 110 0 0  setpos 90 35 0  setpos 90 12 0   ; all on the ground: flat,
+                                                 ; skipped (see the status line)
+lines                                            ; outline where it would be
+setpos 70 0 0  setpos 110 0 0  setpos 90 35 0  setpos 70 0 0
+`,
+  },
+  {
+    id: 'tetra-crystal',
+    title: 'Tetrahedral crystal slab',
+    category: 'Tetrahedra',
+    accuracy: 'exact',
+    description: '15 regular tetrahedra on a triangular lattice, each built by the turtle and closed by its own window.',
+    code: `; 15 regular tetrahedra (edge 40) on a triangular lattice: rows of 5, 4, 3,
+; 2, 1. Each cell: pen down (fresh window), base triangle, climb to the apex,
+; then pen up and retrace to the next cell without adding points.
+; 54.7356103 = arctan(sqrt 2): the climb from a base corner to the apex.
+tetrahedra
+repeat 5 [
+  color hsv(160 + repcount * 25, 60, 100)
+  repeat 6 - repcount [                              ; repcount: the row here
+    pendown forward 40 yawleft 120 forward 40        ; corners 1, 2, 3
+    yawleft 150 pitchup 54.7356103 forward 40        ; corner 4: the apex
+    penup back 40 pitchdown 54.7356103 yawright 150  ; retrace (pen up)
+    back 40 yawright 120                             ; next cell's corner 1
+  ]
+  back 40 * (6 - repcount)                           ; back to the row start
+  yawleft 60 forward 40 yawright 60                  ; next row, half a cell over
+]
+`,
+  },
+  {
+    id: 'tetra-sierpinski',
+    title: 'Sierpiński tetrahedron (level 3)',
+    category: 'Tetrahedra',
+    accuracy: 'exact',
+    description: '64 separate solids from three rounds of halving; exact integer corners.',
+    code: sierpinskiCode(),
+  },
+  {
+    id: 'tetra-starburst',
+    title: 'Tetrahedral starburst',
+    category: 'Tetrahedra',
+    accuracy: 'artistic',
+    description: '30 spikes from one centre, each its own four-point window, spread by the golden angle.',
+    code: `; 30 spikes from one centre. Pen up, home, aim, pen down: each spike starts a
+; fresh window at the centre, so spikes never join each other.
+tetrahedra
+repeat 30 [
+  penup home
+  yawright repcount * 137.5          ; the golden angle spreads the spikes
+  pitchup 70 * sin(repcount * 53)    ; and tilts them up and down
+  pendown                            ; point 1: the centre
+  color hsv(repcount * 12, 75, 100)
+  forward 90                         ; point 2: the tip
+  pitchup 90 forward 14              ; points 3 and 4 widen the tip
+  yawleft 90 forward 14              ; so the spike is a solid
+]
+penup home
+`,
+  },
+  {
+    id: 'tetra-tunnel',
+    title: 'Twisted tetrahedral tunnel',
+    category: 'Tetrahedra',
+    accuracy: 'approximation',
+    description: 'One continuous window spirals round a ring: 96 solids close into a twisted tube.',
+    code: `; Points spiral round a ring of radius 80 in steps of a quarter turn plus a
+; little twist (93.75 degrees), moving 3.75 degrees along the ring each time.
+; Any four in a row surround the core, so the sliding window makes a solid
+; tube. 98 steps reach the first points again and close the tunnel.
+tetrahedra penup
+setpos 100 0 0 pendown
+repeat 98 [
+  color hsv(repcount * 3.75, 70, 100)
+  setpos (80 + 20 * cos(repcount * 93.75)) * cos(repcount * 3.75)
+         (80 + 20 * cos(repcount * 93.75)) * sin(repcount * 3.75)
+         20 * sin(repcount * 93.75)
+]
+`,
+  },
+  {
+    id: 'tetra-coral',
+    title: 'Tetrahedral coral',
+    category: 'Tetrahedra',
+    accuracy: 'artistic',
+    description: 'Five tapering tetrahedron chains grow from one base; pen up between branches keeps them apart.',
+    code: `; Five branches, each a chain of tetrahedra whose steps shrink as it grows.
+; Pen up before each branch starts a fresh window, so branches never bridge.
+tetrahedra
+repeat 5 [
+  penup home
+  yawright repcount * 72 pitchup 25 rollright 180   ; aim this branch
+  color hsv(repcount * 25 + 290, 75, 100)
+  pendown forward 30
+  repeat 7 + repcount [                              ; longer and longer branches
+    rollright 109.4712206 yawright 120 forward 30 - repcount * 1.5
+    rollright 109.4712206 yawleft 120 forward 29 - repcount * 1.5
+  ]
+]
+penup home
+`,
+  },
+  {
+    id: 'glass-tetra',
+    title: 'Nested glass tetrahedra',
+    category: 'Tetrahedra',
+    accuracy: 'exact',
+    description: 'Four concentric regular tetrahedra; outer shells are more transparent, the core is opaque.',
+    code: `; Four regular tetrahedra around one centre, each its own window (pen up,
+; move, pen down). hsva alpha falls from 100 (opaque core) to 18 outside.
+tetrahedra
+color hsv(30, 90, 100)
+penup setpos 20 20 20 pendown setpos 20 -20 -20 setpos -20 20 -20 setpos -20 -20 20
+color hsva(330, 75, 100, 45)
+penup setpos 45 45 45 pendown setpos 45 -45 -45 setpos -45 45 -45 setpos -45 -45 45
+color hsva(260, 70, 100, 28)
+penup setpos 72 72 72 pendown setpos 72 -72 -72 setpos -72 72 -72 setpos -72 -72 72
+color hsva(190, 70, 100, 18)
+penup setpos 100 100 100 pendown setpos 100 -100 -100 setpos -100 100 -100 setpos -100 -100 100
+penup home
 `,
   },
   {
@@ -220,6 +354,52 @@ repeat 60 [
   yawright 89
   pitchup 2
 ]
+`,
+  },
+  {
+    id: 'glass-mobius',
+    title: 'Glass Möbius strip (hsva)',
+    category: 'Color',
+    accuracy: 'approximation',
+    description: 'An hsva() gradient: hue sweeps the rainbow while the opacity rises and falls around the loop.',
+    code: `; hsva(hue, saturation, value, alpha): alpha is a percentage, 0 invisible,
+; 100 opaque. Here it swings between 15 and 95 around the strip.
+penup setpos 45 0 0 triangles pendown
+setpos 75 0 0
+repeat 36 [
+  color hsva(repcount * 10, 70, 100, 55 + 40 * sin(repcount * 10))
+  setpos (60 - 15 * cos(5 * repcount)) * cos(10 * repcount)
+         (60 - 15 * cos(5 * repcount)) * sin(10 * repcount)
+         -15 * sin(5 * repcount)
+  setpos (60 + 15 * cos(5 * repcount)) * cos(10 * repcount)
+         (60 + 15 * cos(5 * repcount)) * sin(10 * repcount)
+         15 * sin(5 * repcount)
+]
+`,
+  },
+  {
+    id: 'glass-cube',
+    title: 'Glass cube with a core (rgba)',
+    category: 'Color',
+    accuracy: 'artistic',
+    description: 'rgba() polygon walls at 30% let you see an opaque tetrahedron and a translucent diagonal inside.',
+    code: `; rgba(red, green, blue, alpha): channels 0-255, alpha 0-100 percent.
+; Opaque things inside translucent walls stay visible.
+tetrahedra color rgb(255, 170, 40)               ; an opaque core
+penup setpos 45 45 45 pendown setpos 45 15 15 setpos 15 45 15 setpos 15 15 45
+lines color rgba(255, 255, 255, 60)              ; a translucent diagonal
+penup setpos 0 0 0 pendown setpos 60 60 60
+penup home                                       ; walls: the solid cube walk
+color rgba(90, 200, 255, 30)
+polygon [ repeat 4 [ forward 60 yawright 90 ] ]
+repeat 4 [
+  color rgba(90 + repcount * 30, 200, 255, 30)
+  polygon [ repeat 4 [ forward 60 pitchup 90 ] ]
+  forward 60 yawright 90
+]
+pitchup 90 forward 60 pitchdown 90
+color rgba(90, 200, 255, 30)
+polygon [ repeat 4 [ forward 60 yawright 90 ] ]
 `,
   },
   {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ColorComponentError, hsvToHex, rgbToHex } from './color';
+import { alphaPercent, ColorComponentError, hsvToHex, rgbToHex } from './color';
 
-function componentError(fn: () => string): ColorComponentError {
+function componentError(fn: () => unknown): ColorComponentError {
   try {
     fn();
   } catch (error) {
@@ -69,5 +69,28 @@ describe('hsv(h, s, v)', () => {
     expect(hsvToHex(0, 1, 1)).toBe('#030303');
     expect(hsvToHex(0, 0, 0)).toBe('#000000');
     expect(hsvToHex(0, 100, 100)).toBe('#ff0000');
+  });
+});
+
+describe('alpha (rgba/hsva)', () => {
+  it('is a whole percent 0–100, rounding half up', () => {
+    expect(alphaPercent(0, 'rgba', [0, 0, 0])).toBe(0);
+    expect(alphaPercent(1, 'rgba', [0, 0, 0])).toBe(1);
+    expect(alphaPercent(100, 'hsva', [0, 0, 0])).toBe(100);
+    expect(alphaPercent(37.5, 'rgba', [0, 0, 0])).toBe(38);
+    expect(alphaPercent(37.49, 'rgba', [0, 0, 0])).toBe(37);
+    expect(alphaPercent(99.5, 'rgba', [0, 0, 0])).toBe(100);
+  });
+
+  it.each([
+    [-0.5, 'rgba alpha is a percentage between 0 (invisible) and 100 (opaque), but got -0.5.'],
+    [100.01, 'rgba alpha is a percentage between 0 (invisible) and 100 (opaque), but got 100.01.'],
+    [Infinity, 'rgba alpha must be a finite number.'],
+    [NaN, 'rgba alpha must be a finite number.'],
+    [0.5, 'rgba alpha is a percentage (0–100), not 0–1. Did you mean rgba(255, 128, 0, 50)?'],
+  ])('rejects %d as component 3', (alpha, message) => {
+    const error = componentError(() => alphaPercent(alpha, 'rgba', [255, 128, 0]));
+    expect(error.component).toBe(3);
+    expect(error.message).toBe(message);
   });
 });

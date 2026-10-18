@@ -20,7 +20,7 @@ const logoLanguage = StreamLanguage.define<null>({
       if (word === 'repeat') return 'keyword';
       if (word === 'repcount') return 'variableName.special';
       if (findCommand(word)) return 'variableName.function';
-      if (word in NAMED_COLORS || word === 'rgb' || word === 'hsv') return 'atom';
+      if (word in NAMED_COLORS || ['rgb', 'hsv', 'rgba', 'hsva'].includes(word)) return 'atom';
       if ((FUNCTIONS as readonly string[]).includes(word)) return 'variableName.standard';
       return 'invalid';
     }

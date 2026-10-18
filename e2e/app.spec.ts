@@ -126,7 +126,8 @@ test('the gallery shows categories, accuracy labels, and sources, and opens the 
   await expect(card.locator('.badge')).toHaveText('Exact');
   await expect(card).toContainText('56 triangles');
   await expect(card.getByRole('link')).toHaveAttribute('href', 'https://arxiv.org/abs/2609.17700');
-  await expect(dialog.locator('.card', { hasText: 'Möbius strip' }).locator('.badge')).toHaveText('Approximation');
+  const mobius = dialog.locator('.card', { has: page.getByRole('button', { name: 'Möbius strip', exact: true }) });
+  await expect(mobius.locator('.badge')).toHaveText('Approximation');
 
   await card.getByRole('button', { name: 'Mizhaev genus-3 polyhedron' }).click();
   await expect(dialog).toBeHidden();
@@ -338,7 +339,17 @@ test('re-running does not leak GPU geometries or textures', async ({ page }) => 
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       return (window as unknown as { __logo3d: { memory(): object } }).__logo3d.memory();
     });
-  const examples = ['Globe of rings', 'Folded triangle strip', 'Pinwheel', 'Tetrahedron chain (Boerdijk–Coxeter helix)', 'Mizhaev genus-3 polyhedron', 'Filled polygons'];
+  const examples = [
+    'Globe of rings',
+    'Folded triangle strip',
+    'Pinwheel',
+    'Tetrahedron chain (Boerdijk–Coxeter helix)',
+    'Mizhaev genus-3 polyhedron',
+    'Filled polygons',
+    'Glass cube with a core (rgba)',
+    'Glass Möbius strip (hsva)',
+    'Nested glass tetrahedra',
+  ];
   const runAll = async () => {
     for (const label of examples) {
       await page.locator('#examples').selectOption({ label });
@@ -359,3 +370,184 @@ test('stacks the view above the code on narrow screens', async ({ page }) => {
   expect(view!.y + view!.height).toBeLessThanOrEqual(code!.y);
   expect(code!.width).toBeGreaterThan(340);
 });
+
+test.describe('flight is translation, not zoom (deterministic clock)', () => {
+  const sub = (a: number[], b: number[]) => a.map((n, i) => n - b[i]);
+  const len = (a: number[]) => Math.hypot(...a);
+  const dist = (c: { position: number[]; target: number[] }) => len(sub(c.position, c.target));
+
+  test.beforeEach(async ({ page }) => {
+    // Fake timers drive requestAnimationFrame and performance.now, so held keys last exactly as long.
+    await page.clock.install();
+    await page.reload();
+    await expect(status(page)).toContainText('Ran');
+    await page.locator('#viewport').focus();
+    await page.clock.runFor(2000); // initial damping settles
+  });
+
+  /** Holds `key` for exactly `ms` of app time, sampling the camera every 100 ms. */
+  async function hold(page: Page, key: string, ms: number) {
+    const samples = [await camera(page)];
+    await page.keyboard.down(key);
+    for (let t = 0; t < ms; t += 100) {
+      await page.clock.runFor(100);
+      samples.push(await camera(page));
+    }
+    await page.keyboard.up(key);
+    await page.clock.runFor(100);
+    samples.push(await camera(page));
+    return samples;
+  }
+
+  test('W and S move camera and target by the same vector along the view, at constant distance', async ({ page }) => {
+    const start = await camera(page);
+    const d0 = dist(start);
+    const forward = await hold(page, 'w', 3000);
+    for (const c of forward) {
+      expect(Math.abs(dist(c) - d0)).toBeLessThan(1e-9 * d0); // a dolly would shrink this
+      expect(len(sub(sub(c.position, start.position), sub(c.target, start.target)))).toBeLessThan(1e-9 * d0);
+      expect(c.direction[0] * start.direction[0] + c.direction[1] * start.direction[1] + c.direction[2] * start.direction[2]).toBeGreaterThan(1 - 1e-12);
+    }
+    const afterW = forward.at(-1)!;
+    const moved = sub(afterW.position, start.position);
+    // Flight goes further than the orbit target was: it passes through it, which a zoom never does.
+    expect(len(moved)).toBeGreaterThan(d0);
+    const along = moved.reduce((s, n, i) => s + n * start.direction[i], 0);
+    expect(along / len(moved)).toBeGreaterThan(1 - 1e-12);
+
+    const back = await hold(page, 's', 3000);
+    for (const c of back) expect(Math.abs(dist(c) - d0)).toBeLessThan(1e-9 * d0);
+    const end = back.at(-1)!;
+    // W then S for the same time returns home, up to the key events landing mid-frame (two frames).
+    const twoFrames = (len(moved) / 3) * (2 / 60);
+    expect(len(sub(end.position, start.position))).toBeLessThan(twoFrames);
+    expect(len(sub(end.target, start.target))).toBeLessThan(twoFrames);
+    expect(Math.abs(dist(end) - d0)).toBeLessThan(1e-9 * d0);
+  });
+
+  test('A/D strafe and E/Q rise and sink, carrying the target along', async ({ page }) => {
+    for (const [key, check] of [
+      ['d', (m: number[]) => Math.abs(m[2]) < 1e-9 && len(m) > 10],
+      ['a', (m: number[]) => Math.abs(m[2]) < 1e-9 && len(m) > 10],
+      ['e', (m: number[]) => m[2] > 10 && Math.hypot(m[0], m[1]) < 1e-9],
+      ['q', (m: number[]) => m[2] < -10 && Math.hypot(m[0], m[1]) < 1e-9],
+    ] as const) {
+      const before = await camera(page);
+      const after = (await hold(page, key, 300)).at(-1)!;
+      const moved = sub(after.position, before.position);
+      expect(check(moved), key).toBe(true);
+      expect(len(sub(sub(after.target, before.target), moved)), key).toBeLessThan(1e-9 * dist(before));
+    }
+  });
+
+  test('after flying, dragging orbits around the carried target without a jump', async ({ page }) => {
+    await hold(page, 'w', 600);
+    const flown = await camera(page);
+    const box = (await page.locator('#viewport').boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 2, box.y + box.height / 2);
+    await page.clock.runFor(50);
+    const firstFrame = await camera(page);
+    // A tiny drag makes a tiny change: the pivot is the flown target, not the old one.
+    expect(len(sub(firstFrame.target, flown.target))).toBeLessThan(1e-9);
+    expect(len(sub(firstFrame.position, flown.position))).toBeLessThan(0.05 * dist(flown));
+    await page.mouse.move(box.x + box.width / 2 + 150, box.y + box.height / 2);
+    await page.mouse.up();
+    await page.clock.runFor(2000);
+    const orbited = await camera(page);
+    expect(len(sub(orbited.target, flown.target))).toBeLessThan(1e-9);
+    expect(Math.abs(dist(orbited) - dist(flown))).toBeLessThan(1e-6 * dist(flown));
+    expect(len(sub(orbited.position, flown.position))).toBeGreaterThan(1);
+
+    // Flight still follows the new view after the orbit.
+    const before = await camera(page);
+    const after = (await hold(page, 'w', 300)).at(-1)!;
+    const moved = sub(after.position, before.position);
+    expect(moved.reduce((s, n, i) => s + n * before.direction[i], 0) / len(moved)).toBeGreaterThan(1 - 1e-9);
+    expect(Math.abs(dist(after) - dist(before))).toBeLessThan(1e-9 * dist(before));
+  });
+
+  test('the mouse wheel zooms: distance changes while the target stays put', async ({ page }) => {
+    const before = await camera(page);
+    const box = (await page.locator('#viewport').boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, -400);
+    await page.clock.runFor(500);
+    const after = await camera(page);
+    expect(dist(after)).toBeLessThan(dist(before) * 0.9);
+    expect(len(sub(after.target, before.target))).toBeLessThan(1e-9);
+  });
+});
+
+test('the Tetrahedra gallery section opens solid examples', async ({ page }) => {
+  await page.locator('#gallery-open').click();
+  const dialog = page.getByRole('dialog', { name: 'Example gallery' });
+  const section = dialog.locator('.gallery-section', { has: page.getByRole('heading', { name: 'Tetrahedra' }) });
+  await expect(section.locator('.card')).toHaveCount(8);
+  await expect(section.locator('.card', { hasText: 'Solid or flat?' }).locator('.badge')).toHaveText('Lesson');
+  const card = section.locator('.card', { hasText: 'Sierpiński tetrahedron (level 3)' });
+  await expect(card.locator('.badge')).toHaveText('Exact');
+  await expect(card).toContainText('64 tetrahedra');
+  await card.getByRole('button', { name: 'Sierpiński tetrahedron (level 3)' }).click();
+  await expect(status(page)).toContainText('256 triangles · 64 tetrahedra');
+  const extent = await page.evaluate(() => (window as unknown as Debug).__logo3d.ndcExtent());
+  expect(extent).toBeLessThanOrEqual(1);
+  expect(extent).toBeGreaterThan(0.2);
+
+  await page.locator('#examples').selectOption({ label: 'Solid or flat? (skipped windows)' });
+  await expect(status(page)).toContainText('1 tetrahedron · 1 flat window skipped');
+});
+
+test('rgba/hsva colors render translucent, alpha 0 is kept but not drawn', async ({ page }) => {
+  await page.locator('#live').uncheck();
+  /** Pixels that are strongly red, and pixels with a weaker red tint over the dark background. */
+  const reds = () =>
+    page.evaluate(() => {
+      const source = document.querySelector<HTMLCanvasElement>('#viewport canvas')!;
+      const canvas = document.createElement('canvas');
+      canvas.width = source.width;
+      canvas.height = source.height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(source, 0, 0);
+      const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let strong = 0;
+      let tint = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const [r, g, b] = [data[i], data[i + 1], data[i + 2]];
+        if (r > 170 && g < 90 && b < 90) strong++;
+        else if (r > 45 && r > g + 25 && r > b + 10) tint++;
+      }
+      return { strong, tint };
+    });
+  const square = (color: string) => `penup ${color} polygon [ repeat 4 [ forward 100 yawright 90 ] ]`;
+  const run = async (code: string) => {
+    await setCode(page, code);
+    await page.keyboard.press('ControlOrMeta+Enter');
+    await expect(status(page)).toContainText('Ran');
+  };
+
+  // Nothing drawn, but framed like the 100 × 100 square (turtle at its far corner): the red X axis
+  // and turtle are the baseline.
+  await run('penup setpos 100 100 0');
+  await expect.poll(async () => (await reds()).strong).toBeLessThan(200);
+  const baseline = await reds();
+
+  await run(square('color rgb(255, 0, 0)'));
+  await expect.poll(async () => (await reds()).strong).toBeGreaterThan(2000);
+
+  await run(square('color rgba(255, 0, 0, 30)'));
+  await expect(status(page)).toContainText('2 triangles · 2 translucent');
+  await expect(page.locator('#hud')).toContainText('alpha 30%');
+  // Same square at 30 %: a dim red tint over the dark background, no full-strength red left.
+  await expect.poll(async () => { const r = await reds(); return r.strong < 200 && r.tint > baseline.tint + 2000; }).toBe(true);
+
+  await run(square('color hsva(0, 100, 100, 0)'));
+  await expect(status(page)).toContainText('2 triangles · 2 invisible (alpha 0)');
+  await expect.poll(async () => { const r = await reds(); return r.strong + Math.abs(r.tint - baseline.tint); }).toBeLessThan(100);
+
+  await setCode(page, 'color rgba(255, 0, 0, 0.5) fd 10');
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await expect(page.locator('#error')).toContainText('Did you mean rgba(255, 0, 0, 50)?');
+});
+

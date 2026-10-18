@@ -164,9 +164,13 @@ export function helpHtml(): string {
       <tr><td><code>color #ff8800</code> or <code>#f80</code></td><td>Hex, 6 or 3 digits.</td></tr>
       <tr><td><code>color rgb(<i>r</i>, <i>g</i>, <i>b</i>)</code></td><td>Red, green, blue from <b>0 to 255</b>; fractions round to the nearest whole number.</td></tr>
       <tr><td><code>color hsv(<i>h</i>, <i>s</i>, <i>v</i>)</code></td><td>Hue in degrees (wraps: 360 = 0, −30 = 330); saturation and value in <b>percent, 0 to 100</b>.</td></tr>
+      <tr><td><code>color rgba(<i>r</i>, <i>g</i>, <i>b</i>, <i>a</i>)</code><br><code>color hsva(<i>h</i>, <i>s</i>, <i>v</i>, <i>a</i>)</code></td><td>The same plus <b>alpha</b> (opacity) in <b>percent</b>: 0 is invisible, 100 is opaque, rounded to a whole percent.
+      Every other color form is opaque.</td></tr>
     </tbody></table>
     <p class="note">Components may be any arithmetic, so <code>repeat 18 [ color hsv(repcount * 20, 80, 100) forward 10 yawright 20 ]</code> draws a rainbow.
-    Out-of-range components are errors, and a value between 0 and 1 for saturation or value is rejected because 0–100 is expected.</p>
+    Out-of-range components are errors, and a value between 0 and 1 for saturation, value, or alpha is rejected because 0–100 is expected.
+    Lines and faces keep the opacity they were drawn with; alpha 0 shapes still count (and still fill windows) but are not shown.
+    Overlapping see-through shapes can blend in a slightly wrong order from some angles, as in most real-time 3D.</p>
 
     <h3>Moving the camera</h3>
     <table class="ref"><tbody>

@@ -4,7 +4,7 @@ import { parse } from '../lang/parser';
 import { DrawingBuilder, type DrawMode, type Drawing, type Segment, type Triangle } from '../geometry/drawing';
 import { HOME_POSE, move, pitch, roll, yaw, type Pose } from '../turtle/turtle';
 import { cosSinDeg, vec } from '../turtle/vec';
-import { ColorComponentError, hsvToHex, rgbToHex } from './color';
+import { alphaPercent, ColorComponentError, hsvToHex, rgbToHex } from './color';
 
 /** A snapshot after one executed command, used by the playground to replay a run. */
 export interface Frame {
@@ -25,6 +25,8 @@ export interface RunResult {
   readonly penDown: boolean;
   readonly mode: DrawMode;
   readonly color: string;
+  /** Pen opacity, 0 (invisible) to 1 (opaque), in whole percents. */
+  readonly alpha: number;
   /** Number of commands and repeat iterations executed. */
   readonly steps: number;
   /** Every primitive ever emitted, including ones later hidden by `clear`. */
@@ -92,6 +94,7 @@ class Interpreter {
       penDown: d.penDown,
       mode: d.mode,
       color: d.color,
+      alpha: d.alpha,
       steps: this.steps,
       allSegments: d.segments,
       allTriangles: d.triangles,
@@ -202,7 +205,7 @@ class Interpreter {
         d.setMode('tetrahedra');
         break;
       case 'color':
-        d.setColor(this.color(arg as ColorArg));
+        d.setColor(...this.color(arg as ColorArg));
         break;
       case 'polygon':
         break; // handled as a block statement
@@ -229,12 +232,18 @@ class Interpreter {
     }
   }
 
-  /** Evaluates a color argument to canonical `#rrggbb`, reporting bad components where they are. */
-  private color(arg: ColorArg): string {
-    if (arg.form === 'hex') return arg.hex;
+  /**
+   * Evaluates a color argument to canonical `#rrggbb` plus opacity (0–1, whole percents),
+   * reporting bad components where they are.
+   */
+  private color(arg: ColorArg): [string, number] {
+    if (arg.form === 'hex') return [arg.hex, 1];
     const values = arg.args.map((e) => this.evaluateRaw(e));
     try {
-      return arg.form === 'rgb' ? rgbToHex(values[0], values[1], values[2]) : hsvToHex(values[0], values[1], values[2]);
+      const [x, y, z] = values;
+      const hex = arg.form === 'rgb' || arg.form === 'rgba' ? rgbToHex(x, y, z) : hsvToHex(x, y, z);
+      if (arg.form === 'rgb' || arg.form === 'hsv') return [hex, 1];
+      return [hex, alphaPercent(values[3], arg.form, values.slice(0, 3)) / 100];
     } catch (error) {
       if (error instanceof ColorComponentError) throw new LogoError('runtime', error.message, arg.args[error.component].span);
       throw error;

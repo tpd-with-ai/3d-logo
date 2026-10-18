@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { Bounds } from '../geometry/drawing';
 import type { Pose } from '../turtle/turtle';
 import { DrawingLayer } from './drawingLayer';
-import { FlyKeys } from './fly';
+import { FlyKeys, keyCode } from './fly';
 import { labelSprite } from './label';
 import { TurtleModel } from './turtleModel';
 
@@ -99,9 +99,9 @@ export class Viewport {
     const el = this.container;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
-      if (this.fly.press(event.code)) event.preventDefault();
+      if (this.fly.press(keyCode(event))) event.preventDefault();
     };
-    const onKeyUp = (event: KeyboardEvent) => this.fly.release(event.code);
+    const onKeyUp = (event: KeyboardEvent) => this.fly.release(keyCode(event));
     const clear = () => this.fly.clear();
     const onVisibility = () => document.hidden && clear();
     // Clicking or dragging in the view engages it for the keyboard.

@@ -3,8 +3,8 @@
 A small, teachable 3D version of Logo with an interactive browser playground. Drive a turtle
 through space with six turtle-relative turns (`yawleft`/`yawright`, `pitchup`/`pitchdown`,
 `rollleft`/`rollright`, with classic aliases such as `left`, `right`, `climb`, `dive`) and draw
-lines, triangle strips, closed tetrahedra, or flat `polygon` faces, in named, hex, `rgb()`, or
-`hsv()` colors. A gallery of 30 examples ranges from turning lessons to exact polyhedra, including
+lines, triangle strips, closed tetrahedra, or flat `polygon` faces, in named, hex, `rgb()`,
+`hsv()`, or translucent `rgba()` / `hsva()` colors. A gallery of 39 examples ranges from turning lessons to exact polyhedra, including
 the eight-faced genus-3 polyhedron from R. Mizhaev's 2026 paper.
 
 ```logo
@@ -32,7 +32,9 @@ sources, and stats) or pick one from the header menu, and open **Help** for the 
 
 Camera: drag to orbit, right-drag or Shift-drag to pan, scroll to zoom. Click or Tab into the view
 to fly with the keyboard: W/S forward/back along the view, A/D strafe, E/Q up/down along world Z,
-Shift for 3× speed, Esc to leave. Flight moves the orbit target with the camera, so a later drag
+Shift for 3× speed, Esc to leave (keys are matched by physical position; synthetic or remote
+events without a key code fall back to the letter). Unlike the wheel, which dollies toward the
+orbit target, flight moves the orbit target with the camera by the same vector, so a later drag
 orbits around the point in front of you without snapping. Speed scales with the framed scene and
 is frame-rate independent; held keys are dropped on blur, tab switch, or when a dialog opens.
 
@@ -93,4 +95,6 @@ src/examples.ts, src/gallery/                          example programs; generat
   angles to 7 decimals).
 - `polygon` needs flat, non-self-crossing outlines. Consecutive tetrahedra are independent, so a
   shared face is drawn twice (hidden inside the chain).
+- Translucent faces are sorted per batch, not per triangle, so overlapping translucent shapes can
+  blend in a slightly wrong order from some angles.
 - Line width and lighting are fixed by the renderer, not the language.

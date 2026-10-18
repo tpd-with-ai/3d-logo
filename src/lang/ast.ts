@@ -10,12 +10,14 @@ export type Expr =
 
 /**
  * A color argument. Names and hex values are resolved to lowercase `#rrggbb` by the parser;
- * `rgb(r, g, b)` and `hsv(h, s, v)` keep their component expressions, which the interpreter
- * evaluates (so they may use arithmetic and `repcount`) and converts to `#rrggbb`.
+ * `rgb(r, g, b)`, `hsv(h, s, v)`, `rgba(r, g, b, a)`, and `hsva(h, s, v, a)` keep their component
+ * expressions, which the interpreter evaluates (so they may use arithmetic and `repcount`) and
+ * converts to `#rrggbb` plus an alpha percentage.
  */
 export type ColorArg =
   | { kind: 'color'; form: 'hex'; hex: string; span: Span }
-  | { kind: 'color'; form: 'rgb' | 'hsv'; args: [Expr, Expr, Expr]; span: Span };
+  | { kind: 'color'; form: 'rgb' | 'hsv'; args: [Expr, Expr, Expr]; span: Span }
+  | { kind: 'color'; form: 'rgba' | 'hsva'; args: [Expr, Expr, Expr, Expr]; span: Span };
 
 export interface CommandStatement {
   kind: 'command';
