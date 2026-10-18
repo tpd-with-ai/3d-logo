@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="A small, teachable 3D Logo: drive a turtle through space and draw lines and triangles." />
+    <title>3D Logo Playground</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M28 16 6 4l5 12-5 12z' fill='%2386efac'/></svg>" />
+  </head>
+  <body>
+    <a class="skip-link" href="#editor">Skip to code editor</a>
+    <header class="topbar">
+      <h1 class="brand"><span class="brand-mark" aria-hidden="true">▲</span> 3D Logo <span class="brand-sub">Playground</span></h1>
+      <div class="topbar-actions">
+        <label class="field">
+          <span class="field-label">Example</span>
+          <select id="examples" aria-label="Load an example program"></select>
+        </label>
+        <button id="help-open" class="btn btn-ghost" type="button" aria-haspopup="dialog">Help</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel code-panel" aria-label="Program">
+        <div class="toolbar" role="toolbar" aria-label="Run controls">
+          <button id="run" class="btn btn-primary" type="button" title="Run (Ctrl/⌘ + Enter)">
+            <span aria-hidden="true">▶</span> Run
+          </button>
+          <button id="step" class="btn" type="button" title="Run one command at a time">Step</button>
+          <button id="stop" class="btn" type="button" title="Stop playback (Ctrl/⌘ + .)" disabled>
+            <span aria-hidden="true">■</span> Stop
+          </button>
+          <label class="field field-inline">
+            <span class="field-label">Speed</span>
+            <select id="speed">
+              <option value="0">Instant</option>
+              <option value="300">Fast</option>
+              <option value="40">Medium</option>
+              <option value="6">Slow</option>
+            </select>
+          </label>
+          <label class="toggle" title="Re-run instantly while you type">
+            <input id="live" type="checkbox" checked /> Live
+          </label>
+        </div>
+        <div id="editor" class="editor"></div>
+        <div class="status-area">
+          <p id="status" class="status" role="status" aria-live="polite"></p>
+          <div id="error" class="error" role="alert" hidden>
+            <span id="error-text"></span>
+            <button id="error-jump" class="btn btn-small" type="button">Show in code</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel view-panel" aria-label="3D view">
+        <div id="viewport" class="viewport" tabindex="0" aria-describedby="view-help"></div>
+        <div class="view-toolbar" role="toolbar" aria-label="View controls">
+          <button id="fit" class="btn btn-small" type="button" title="Frame the drawing (F)">Fit</button>
+          <button id="reset-view" class="btn btn-small" type="button" title="Reset camera to the default view">Reset view</button>
+          <button id="zoom-in" class="btn btn-small btn-icon" type="button" aria-label="Zoom in">+</button>
+          <button id="zoom-out" class="btn btn-small btn-icon" type="button" aria-label="Zoom out">−</button>
+          <label class="toggle toggle-small"><input id="guides" type="checkbox" checked /> Grid</label>
+          <button id="clear" class="btn btn-small" type="button" title="Clear the drawing and send the turtle home">Clear</button>
+        </div>
+        <div id="hud" class="hud" aria-label="Turtle state"></div>
+        <p id="view-help" class="view-help">
+          Drag to orbit · right-drag or Shift-drag to pan · scroll to zoom. With the view focused: arrows pan,
+          Shift+arrows orbit, + / − zoom, F fits.
+        </p>
+      </section>
+    </main>
+
+    <dialog id="help" class="help" aria-labelledby="help-title">
+      <div class="help-head">
+        <h2 id="help-title">Language reference</h2>
+        <button id="help-close" class="btn btn-ghost" type="button" aria-label="Close help">✕</button>
+      </div>
+      <div id="help-body" class="help-body"></div>
+    </dialog>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
